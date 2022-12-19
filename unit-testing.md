@@ -504,3 +504,65 @@ public void IsDeliveryValid_InvalidDate_ReturnsFalse() {
 * NOTE: The paradigm of object-oriented programming (OOP) has become a success partly because of this readability benefit. With OOP, you, too, can structure the code in a way that reads like a story.
 
 # Chapter 4 The four pillars of a good unit test
+
+## 4.1 Diving into the four pillars of a good unit test
+* Protection against regressions
+* Resistance to refactoring
+* Fast feedback
+* Maintainability
+
+### 4.1.1 The first pillar: Protection against regressions
+* A regression is when a feature stops working as intended after a certain event (usually, a code modification). 
+  * The terms regression and software bug are synonyms and can be used interchangeably.
+* The worst part is that the more features you develop, the more chances there are that you’ll break one of those features with a new release. 
+  * An unfortunate fact of programming life is that code is not an asset, it’s a liability.
+  * The larger the code base, the more exposure it has to potential bugs.
+* To evaluate how well a test scores on the metric of protecting against regressions, you need to take into account the following:
+  * The amount of code that is executed during the test
+    * Generally, the larger the amount of code that gets executed, the higher the chance that the test will reveal a regression
+    * While it helps to know that this code runs without throwing exceptions, you also need to validate the out- come it produces.
+  * The complexity of that code
+    * Code that represents complex business logic is more important than boilerplate code—bugs in business-critical functionality are the most damaging.
+  * The code’s domain significance
+    * On the other hand, it’s rarely worthwhile to test trivial code. Such code is short and doesn’t contain a substantial amount of business logic.
+    * An example of trivial code is a single-line property like this:
+      ```
+      public class User
+      {
+          public string Name { get; set; }
+      }
+      ```
+    * Furthermore, in addition to your code, the code you didn’t write also counts: for example, libraries, frameworks, and any external systems used in the project.
+      * For the best protection, the test must include those libraries, frameworks, and external sys- tems in the testing scope, in order to check that the assumptions your software makes about these dependencies are correct.
+* To maximize the metric of protection against regressions, the test needs to aim at exercising as much code as possible.
+
+### 4.1.2 The second pillar: Resistance to refactoring
+* The second attribute of a good unit test is resistance to refactoring—the degree to which a test can sustain a refactoring of the underlying application code without turning red (failing).
+* To evaluate how well a test scores on the metric of resisting to refactoring, you need to look at how many `false positives` the test generates. The fewer, the better.
+* As you may recall from chapter 1, the goal of unit testing is to enable sustainable project growth. 
+  * The mechanism by which the tests enable sustainable growth is that they allow you to add new features and conduct regular refactorings without introducing regressions.
+  * There are two specific benefits here:
+    * Tests provide an early warning when you break existing functionality.
+    * You become confident that your code changes won’t lead to regressions.
+  * False positives interfere with both of these benefits:
+    * If tests fail with no good reason, they dilute your ability and willingness to react to problems in code.
+    * On the other hand, when false positives are frequent, you slowly lose trust in the test suite.
+    * This lack of trust leads to fewer refactorings, because you try to reduce code changes to a minimum in order to avoid regressions.
+
+### 4.1.3 What causes false positives?
+* The number of false positives a test produces is directly related to the way the test is structured. 
+* The more the test is coupled to the implementation details of the system under test (SUT), the more false alarms it generates.
+  * You need to make sure the test verifies the end result the SUT delivers: its observable behavior, not the steps it takes to do that.
+  * Tests should approach SUT verification from the end user’s point of view and check only the outcome meaningful to that end user.
+* The best way to structure a test is to make it tell a story about the problem domain.
+  * Should such a test fail, that failure would mean there’s a disconnect between the story and the actual application behavior.
+
+### 4.1.4 Aim at the end result instead of implementation details
+* This test treats MessageRenderer as a black box and is only interested in its observable behavior. (!what about out-of-process dependencies?)
+  * As a result, the test is much more resistant to refactoring—it doesn’t care what changes you make to the SUT as long as the HTML output remains the same
+
+## 4.2 The intrinsic connection between the first two attributes
+* As I mentioned earlier, there’s an intrinsic connection between the first two pillars of a good unit test—`protection against regressions` and `resistance to refactoring`
+
+### 4.2.1 Maximizing test accuracy
+ 

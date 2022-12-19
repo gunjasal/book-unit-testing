@@ -504,7 +504,6 @@ public void IsDeliveryValid_InvalidDate_ReturnsFalse() {
 * NOTE: The paradigm of object-oriented programming (OOP) has become a success partly because of this readability benefit. With OOP, you, too, can structure the code in a way that reads like a story.
 
 # Chapter 4 The four pillars of a good unit test
-
 ## 4.1 Diving into the four pillars of a good unit test
 * Protection against regressions
 * Resistance to refactoring
@@ -565,4 +564,120 @@ public void IsDeliveryValid_InvalidDate_ReturnsFalse() {
 * As I mentioned earlier, there’s an intrinsic connection between the first two pillars of a good unit test—`protection against regressions` and `resistance to refactoring`
 
 ### 4.2.1 Maximizing test accuracy
- 
+ * functionality broken + test passes (false negative)
+   * protection against regressions needed
+   * How good the test is at indicating the presence of bugs (lack of false negatives, the sphere of protection against regressions)
+ * functionality correct + test fails (false positive)
+   * resistance to refactoring needed
+   * How good the test is at indicating the absence of bugs (lack of false positives, the sphere of resistance to refactoring)
+
+### 4.2.2 The importance of false positives and false negatives: The dynamics
+
+## 4.3 The third and fourth pillars: Fast feedback and maintainability
+* Fast feedback
+  * The faster the tests, the more of them you can have in the suite and the more often you can run them.
+  * That’s because slow tests discourage you from running them often, and therefore lead to wasting more time moving in a wrong direction.
+*  Maintainability
+  * How hard it is to understand the test
+    * This component is related to the size of the test. The fewer lines of code in the test, the more readable the test is.
+  * How hard it is to run the test
+    * If the test works with out-of-process dependencies, you have to spend time keeping those dependencies operational
+
+## 4.4 In search of an ideal test
+* Here are the four attributes of a good unit test once again:
+  * Protection against regressions
+  * Resistance to refactoring
+  * Fast feedback
+  * Maintainability
+* These four attributes, when multiplied together, determine the value of a test.
+  * `Value estimate = [0..1] * [0..1] * [0..1] * [0..1]`
+* Remember, all code, including test code, is a liability.
+  * Set a fairly high threshold for the minimum required value, and only allow tests in the suite if they meet this threshold.
+
+### 4.4.1 Is it possible to create an ideal test?
+* Unfortunately, it’s impossible to create such an ideal test. 
+  * The reason is that the first three attributes—`protection against regressions, resistance to refactoring, and fast feedback`— are mutually exclusive. 
+  * Moreover, because of the multiplication principle (see the calculation of the value estimate in the previous section), it’s even trickier to keep the balance.
+
+### 4.4.2 Extreme case #1: End-to-end tests
+* As you may remember from chapter 2, end-to-end tests look at the system from the end user’s perspective.
+  * Since end-to-end tests exercise a lot of code, they provide the best protection against regressions.
+  * In fact, of all types of tests, end-to-end tests exercise the most code—both your code and the code you didn’t write but use in the project, 
+    * such as external libraries, frameworks, and third-party applications.
+  * End-to-end tests are also immune to false positives and thus have a good resistance to refactoring. 
+    * A refactoring, if done correctly, doesn’t change the system’s observable behavior and therefore doesn’t affect the end-to-end tests.
+  * However, despite these benefits, end-to-end tests have a major drawback: they are slow. 
+    * Any system that relies solely on such tests would have a hard time getting rapid feedback.
+  * + branch condition testing
+
+### 4.4.3 Extreme case #2: Trivial tests
+* Unlike end-to-end tests, trivial tests do provide fast feedback—they run very quickly.
+  * They also have a fairly low chance of producing a false positive, so they have good resistance to refactoring. 
+* Trivial tests taken to an extreme result in tautology tests.
+  * They don’t test anything because they are set up in such a way that they always pass or contain semantically meaningless assertions.
+
+### 4.4.4 Extreme case #3: Brittle tests
+* Similarly, it’s pretty easy to write a test that runs fast and has a good chance of catching a regression but does so with a lot of false positives.
+  * it can’t withstand a refactoring and will turn red regardless of whether the underlying functionality is broken.
+* The test is focusing on hows instead of whats and thus ingrains the SUT’s implementation details, preventing any further refactoring.
+
+### 4.4.5 In search of an ideal test: The results
+* Unfortunately, it’s impossible to create an ideal test that has a perfect score in all three attributes
+  * Therefore, you have to make trade-offs.
+* The fourth attribute, maintainability, is not correlated to the first three, with the exception of end-to-end tests.
+  * End-to-end tests are normally larger in size because of the necessity to set up all the dependencies such tests reach out to. 
+* In reality, though, resistance to refactoring is non-negotiable. 
+  * You should aim at gaining as much of it as you can, provided that your tests remain reasonably quick and you don’t resort to the exclusive use of end-to-end tests.
+  * The reason resistance to refactoring is non-negotiable is that whether a test possesses this attribute is mostly a binary choice
+      * the test either has resistance to refactoring or it doesn’t. There are almost no intermediate stages in between.
+* Figure 4.10 
+  * The best tests exhibit maximum `maintainability` and `resistance to refactoring`; always try to max out these two attributes. 
+  * The trade-off comes down to the choice between `protection against regressions` and `fast feedback`.
+
+## 4.5 Exploring well-known test automation concepts
+### 4.5.1 Breaking down the Test Pyramid
+* The Test Pyramid is a concept that advocates for a certain ratio of different types of tests in the test suite (figure 4.11):
+  * Unit tests
+  * Integration tests
+  * End-to-end tests
+* Tests in higher pyramid layers favor protection against regressions, while lower layers emphasize execution speed.
+* Notice that neither layer gives up resistance to refactoring. 
+  * Naturally, end-to-end and inte- gration tests score higher on this metric than unit tests, 
+  * but only as a side effect of being more detached from the production code.
+* The exact mix between types of tests will be different for each team and project. 
+  * But in general, it should retain the pyramid shape: 
+    * end-to-end tests should be the minority; 
+    * unit tests, the majority; 
+    * and integration tests somewhere in the middle.
+  * The reason end-to-end tests are the minority is, again, the multiplication rule described in section 4.4. 
+    * End-to-end tests score extremely low on the metric of fast feed- back. 
+    * They also lack maintainability: they tend to be larger in size and require additional effort to maintain the involved out-of-process dependencies.
+    * Thus, end-to-end tests only make sense when applied to the most critical functionality—features in which you don’t ever want to see any bugs
+  * There are exceptions to the Test Pyramid. 
+    * For example, if all your application does is basic create, read, update, and delete (CRUD) operations with very few business rules or any other complexity, your test “pyramid” will most likely look like a rectangle with an equal number of unit and integration tests and no end-to-end tests.
+      * Unit tests are less useful in a setting without algorithmic or business complexity— they quickly descend into trivial tests. 
+      * At the same time, integration tests retain their value—it’s still important to verify how code, however simple it is, works in integration with other subsystems, such as the database.
+
+### 4.5.2 Choosing between black-box and white-box testing
+* The other well-known test automation concept is black-box versus white-box testing.
+  * Black-box testing is a method of software testing that examines the functionality of a system without knowing its internal structure.
+    * Such testing is normally built around specifications and requirements: what the application is supposed to do, rather than how it does it.
+  * White-box testing is the opposite of that. It’s a method of testing that verifies the application’s inner workings.
+    * The tests are derived from the source code, not requirements or specifications.
+* There are pros and cons to both of these methods. 
+  * White-box testing tends to be more thorough. 
+    * By analyzing the source code, you can uncover a lot of errors that you may miss when relying solely on external specifications. 
+    * On the other hand, tests resulting from white-box testing are often brittle, as they tend to tightly couple to the specific implementation of the code under test.
+    * Such tests produce many false positives and thus fall short on the metric of resistance to refactoring. 
+  * Black-box testing provides the oppo- site set of pros and cons (table 4.1).
+* As you may remember from section 4.4.5, you can’t compromise on resistance to refactoring: a test either possesses resistance to refactoring or it doesn’t. 
+  * Therefore, choose blackbox testing over white-box testing by default. 
+  * Make all tests—be they unit, integration, or end-to-end—view the system as a black box and verify behavior meaningful to the problem domain.
+  * If you can’t trace a test back to a business requirement, it’s an indi- cation of the test’s brittleness. 
+    * Either restructure or delete this test; don’t let it into the suite as-is.
+* Note that even though black-box testing is preferable when writing tests, you can still use the white-box method when analyzing the tests. 
+  * Use code coverage tools to see which code branches are not exercised, but then turn around and test them as if you know nothing about the code’s internal structure. 
+  * Such a combination of the white-box and black-box meth- ods works best.
+
+
+## Chapter 5 Mocks and test fragility

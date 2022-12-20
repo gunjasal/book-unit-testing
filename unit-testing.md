@@ -44,13 +44,6 @@
   * Classical(Detroit)
   * London (mockist) : Test Double
 
-* ref
-  * [manning](https://freecontent.manning.com/what-is-a-unit-test-part-2-classical-vs-london-schools/)
-  * [detroit vs london](https://medium.com/@adrianbooth/test-driven-development-wars-detroit-vs-london-classicist-vs-mockist-9956c78ae95f)
-  * [mocksArentStubs](https://martinfowler.com/articles/mocksArentStubs.html)
-  * [@SpyBean @MockBean 의도적으로 사용하지 않기](https://jojoldu.tistory.com/320)
-  * [TDD에 대한 몇 가지 질문](https://brunch.co.kr/@cleancode/44)
-
 ### 2.1.1 The isolation issue: The London take
 * During the arrange phase, the tests put together two kinds of objects: the system under test (SUT) and one collaborator. In this case, 
   * Customer is the SUT
@@ -666,7 +659,7 @@ public void IsDeliveryValid_InvalidDate_ReturnsFalse() {
     * The tests are derived from the source code, not requirements or specifications.
 * There are pros and cons to both of these methods. 
   * White-box testing tends to be more thorough. 
-    * By analyzing the source code, you can uncover a lot of errors that you may miss when relying solely on external specifications. 
+    *By analyzing the source code, you can uncover a lot of errors that you may miss when relying solely on external specifications. 
     * On the other hand, tests resulting from white-box testing are often brittle, as they tend to tightly couple to the specific implementation of the code under test.
     * Such tests produce many false positives and thus fall short on the metric of resistance to refactoring. 
   * Black-box testing provides the oppo- site set of pros and cons (table 4.1).
@@ -681,3 +674,22 @@ public void IsDeliveryValid_InvalidDate_ReturnsFalse() {
 
 
 ## Chapter 5 Mocks and test fragility
+
+
+
+## Reference
+* [manning - unit testing](https://freecontent.manning.com/what-is-a-unit-test-part-2-classical-vs-london-schools/)
+* [detroit vs london school](https://medium.com/@adrianbooth/test-driven-development-wars-detroit-vs-london-classicist-vs-mockist-9956c78ae95f)
+* [mocksArentStubs](https://martinfowler.com/articles/mocksArentStubs.html)
+* [@SpyBean @MockBean 의도적으로 사용하지 않기](https://jojoldu.tistory.com/320)
+* [TDD에 대한 몇 가지 질문](https://brunch.co.kr/@cleancode/44)
+* https://site.mockito.org/
+
+---
+test (unit test vs integration test , system test , endpoint integration test)
+unit / integration / end-to-end test cost
+test fixture
+test double
+does this code hurts?
+testing test codes
+---

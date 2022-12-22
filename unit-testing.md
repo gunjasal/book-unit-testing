@@ -672,24 +672,328 @@ public void IsDeliveryValid_InvalidDate_ReturnsFalse() {
   * Use code coverage tools to see which code branches are not exercised, but then turn around and test them as if you know nothing about the code’s internal structure. 
   * Such a combination of the white-box and black-box meth- ods works best.
 
+# Chapter 5 Mocks and test fragility
+* The use of mocks in tests is a controversial subject. Some people argue that mocks are a great tool and apply them in most of their tests. Others claim that mocks lead to test fragility and try not to use them at all. 
+* There’s a deep and almost inevitable connection between mocks and test fragility.
 
-## Chapter 5 Mocks and test fragility
+## 5.1 Differentiating mocks from stubs
+###  5.1.1 The types of test doubles
+* A `test double` is an overarching term that describes all kinds of non-production-ready, fake dependencies in tests.
+  * mock (mock, spy)
+    * Mocks help to emulate and examine `outcoming` interactions.
+    * These interactions are calls the SUT makes to its dependencies to change their state.
+  * stub (stub, dummy, fake)
+    * Stubs help to emulate `incoming` interactions. 
+    * These interactions are calls the SUT makes to its dependencies to get input data (figure 5.2).
+* All other differences between the five variations are insignificant implementation details. 
+  * For example, spies serve the same role as mocks. 
+    * The distinction is that spies are written manually, whereas mocks are created with the help of a mocking framework. 
+    * Sometimes people refer to spies as handwritten mocks.
+  * On the other hand, the difference between a stub, a dummy, and a fake is in how intelligent they are. 
+    * A dummy is a simple, hardcoded value such as a null value or a made-up string. 
+      * It’s used to satisfy the SUT’s method signature and doesn’t participate in producing the final outcome. 
+      * A stub is more sophisticated. It’s a fully fledged dependency that you configure to return different values for different scenarios. 
+      * Finally, a fake is the same as a stub for most purposes. The difference is in the rationale for its creation: a fake is usually implemented to replace a dependency that doesn’t yet exist.
+* Mocks help to `emulate and examine` interactions between the SUT and its dependencies, 
+  * while stubs only help to `emulate` those interactions. This is an important distinction. You will see why shortly.
 
+### 5.1.2 Mock (the tool) vs. mock (the test double)
+* The term mock is overloaded and can mean different things in different circumstances
+  * people often use this term to mean any test double, whereas mocks are only a subset of test doubles.
+  * But there’s another meaning for the term mock. You can refer to the classes from mocking libraries as mocks, too.
+    ```
+    // Listing 5.1 Using the Mock class from a mocking library to create a mock
+    public void Sending_a_greetings_email() {
+        var mock = new Mock < IEmailGateway > (); // Uses a mock (the tool) to create a mock (the test double)
+        var sut = new Controller(mock.Object);
 
+        sut.GreetUser("user@email.com");
 
-## Reference
-* [manning - unit testing](https://freecontent.manning.com/what-is-a-unit-test-part-2-classical-vs-london-schools/)
-* [detroit vs london school](https://medium.com/@adrianbooth/test-driven-development-wars-detroit-vs-london-classicist-vs-mockist-9956c78ae95f)
-* [mocksArentStubs](https://martinfowler.com/articles/mocksArentStubs.html)
-* [@SpyBean @MockBean 의도적으로 사용하지 않기](https://jojoldu.tistory.com/320)
-* [TDD에 대한 몇 가지 질문](https://brunch.co.kr/@cleancode/44)
-* https://site.mockito.org/
+        mock.Verify(  // Examines the call from the SUT to the test double
+            x => x.SendGreetingsEmail("user@email.com"),
+            Times.Once
+        );
+    }
+    ```
+  * The test in the following listing also uses the Mock class, but the instance of that class is not a mock, it’s a stub.
+    ```
+    // Listing 5.2 Using the Mock class to create a stub
+    public void Creating_a_report() {
+        var stub = new Mock < IDatabase > (); // Uses a mock (the tool) to create a stub
+        stub.Setup(x => x.GetNumberOfUsers()).Returns(10); // Sets up a canned answer
+        var sut = new Controller(stub.Object);
 
----
-test (unit test vs integration test , system test , endpoint integration test)
-unit / integration / end-to-end test cost
-test fixture
-test double
-does this code hurts?
-testing test codes
----
+        Report report = sut.CreateReport();
+        Assert.Equal(10, report.NumberOfUsers);
+    }
+    ```
+  * This test double emulates an `incoming` interaction—a call that provides the SUT with input data.
+  * On the other hand, in the previous example (listing 5.1), the call to `SendGreetingsEmail()` is an `outcoming` interaction. Its sole purpose is to incur a side effect—send an email.p
+
+### 5.1.3 Don’t assert interactions with stubs
+* Asserting interactions with stubs is a common anti-pattern that leads to fragile tests.
+* As you might remember from chapter 4, the only way to avoid false positives and thus improve resistance to refactoring in tests is to make those tests verify the end result (which, ideally, should be meaningful to a non-programmer), not implementation details.
+* In listing 5.1, the check `mock.Verify(x => x.SendGreetingsEmail("user@email.com"))` corresponds to an actual outcome, and that outcome is meaningful to a domain expert: sending a greetings email is something business people would want the system to do.
+* The following listing shows an example of such a brittle test.
+  ```
+  // Listing 5.3 Asserting an interaction with a stub
+  public void Creating_a_report() {
+      var stub = new Mock < IDatabase > ();
+      stub.Setup(x => x.GetNumberOfUsers()).Returns(10);
+      var sut = new Controller(stub.Object);
+
+      Report report = sut.CreateReport();
+      
+      Assert.Equal(10, report.NumberOfUsers);
+      stub.Verify( // Asserts the interaction with the stub
+          x => x.GetNumberOfUsers(),
+          Times.Once
+      );
+  }
+  ```
+  * This practice of verifying things that aren’t part of the end result is also called overspecification.
+  
+### 5.1.4 Using mocks and stubs together
+* Sometimes you need to create a test double that exhibits the properties of both a mock and a stub.
+  ```
+  // Listing 5.4 storeMock: both a mock and a stub
+  public void Purchase_fails_when_not_enough_inventory() {
+      var storeMock = new Mock < IStore > ();
+      storeMock  
+          .Setup(x => x.HasEnoughInventory( // Sets up a canned answer
+              Product.Shampoo, 5))
+          .Returns(false);
+      var sut = new Customer();
+
+      bool success = sut.Purchase(storeMock.Object, Product.Shampoo, 5);
+
+      Assert.False(success);
+      storeMock.Verify(  // Examines a call from the SUT
+          x => x.RemoveInventory(Product.Shampoo, 5),
+              Times.Never
+      );
+  }
+  ```
+  * This test uses storeMock for two purposes: it returns a canned answer and verifies a method call made by the SUT. 
+    * Notice, though, that these are two different methods: the test sets up the answer from `HasEnoughInventory()` 
+    * but then verifies the call to `RemoveInventory()`.
+  * Thus, the rule of not asserting interactions with stubs is not violated here.
+* When a test double is both a mock and a stub, it’s still called a mock, not a stub.
+
+### 5.1.5 How mocks and stubs relate to commands and queries
+* The notions of mocks and stubs tie to the command query separation (CQS) principle.
+  * The CQS principle states that every method should be either a command or a query, but not both.
+    * As shown in figure 5.3, commands are methods that produce side effects and don’t return any value (return void). 
+    * Examples of side effects include mutating an object’s state, changing a file in the file system, and so on. 
+    * Queries are the opposite of that—they are side-effect free and return a value.
+  * Of course, it’s not always possible to follow the CQS principle. 
+    * There are always methods for which it makes sense to both incur a side effect and return a value. 
+    * A classical example is stack.Pop(). This method both removes a top element from the stack and returns it to the caller.
+  * Test doubles that substitute commands become mocks. Similarly, test doubles that substitute queries are stubs.
+    * `SendGreetingsEmail()` is a command whose side effect is sending an email.
+    * `GetNumberOfUsers()` is a query that returns a value and doesn’t mutate the database state.
+      ```
+      var mock = new Mock<IEmailGateway>();
+      mock.Verify(x => x.SendGreetingsEmail("user@email.com"));
+
+      var stub = new Mock<IDatabase>();
+      stub.Setup(x => x.GetNumberOfUsers()).Returns(10);
+      ```
+## 5.2 Observable behavior vs. implementation details
+* Shit in, shit out.
+* In chapter 4, you also saw that the main reason tests deliver false positives (and thus fail at resistance to refactoring) is because they couple to the code’s implementation details. 
+* The only way to avoid such coupling is to verify the end result the code produces (its observable behavior) and distance tests from implementation details as much as possible. 
+* In other words, tests must focus on the whats, not the hows.
+
+### 5.2.1 Observable behavior is not the same as a public API
+* All production code can be categorized along two dimensions:
+  * Public API vs. private API (where API means application programming interface)
+  * Observable behavior vs. implementation details
+* For a piece of code to be part of the system’s `observable` behavior, it has to do one of the following things:
+  * Expose an operation that helps the client achieve one of its goals. 
+    * An operation is a method that performs a calculation or incurs a side effect or both.
+  * Expose a state that helps the client achieve one of its goals. 
+    * State is the current condition of the system.
+  * Any code that does neither of these two things is an `implementation detail`.
+* Ideally, the system’s public API surface should coincide with its observable behavior, and all its implementation details should be hidden from the eyes of the clients.
+  * Often, though, the system’s public API extends beyond its observable behavior and starts exposing implementation details. Such a system’s implementation details `leak` to its public API surface (figure 5.5).
+
+### 5.2.2 Leaking implementation details: An example with an operation
+* Let’s take a look at examples of code whose implementation details leak to the public API.
+  ```
+  // Listing 5.5 User class with leaking implementation details
+  public class User {
+      public string Name {
+          get;
+          set;
+      }
+
+      public string NormalizeName(string name) {
+          string result = (name ? ? "").Trim();
+
+          if (result.Length > 50)
+              return result.Substring(0, 50);
+
+          return result;
+      }
+  }
+
+  public class UserController {
+      public void RenameUser(int userId, string newName) {
+          User user = GetUserFromDatabase(userId);
+
+          string normalizedName = user.NormalizeName(newName);
+          user.Name = normalizedName;
+
+          SaveUserToDatabase(user);
+      }
+  }
+  ```
+  * So, why isn’t User’s API well-designed? Look at its members once again: 
+    * the Name property and the NormalizeName method. Both of them are public. 
+    * Therefore, in order for the class’s API to be well-designed, these members should be part of the observable behavior.
+    * The only reason `UserController` calls this method is to satisfy the invariant of User. `NormalizeName` is therefore an implementation detail that leaks to the class’s public API (figure 5.6).
+    * To fix the situation and make the class’s API well-designed, User needs to hide NormalizeName() and call it internally
+      ```
+      // Listing 5.6 A version of User with a well-designed API
+      public class User {
+          private string _name;
+          public string Name {
+              get => _name;
+              set => _name = NormalizeName(value);
+          }
+
+          private string NormalizeName(string name) {
+              string result = (name ? ? "").Trim();
+          
+              if (result.Length > 50)
+                  return result.Substring(0, 50);
+          
+              return result;
+          }
+      }
+      public class UserController {
+          public void RenameUser(int userId, string newName) {
+              User user = GetUserFromDatabase(userId);
+              user.Name = newName;
+              SaveUserToDatabase(user);
+          }
+      }
+      ```
+  * If the number of operations the client has to invoke on the class to achieve a single goal is greater than one, then that class is likely leaking implementation details.
+    *  Ideally, any individual goal should be achieved with a single operation.
+
+### 5.2.3 Well-designed API and encapsulation
+* Maintaining a well-designed API relates to the notion of encapsulation.
+* Without encapsulation, you have no practical way to cope with ever-increasing code complexity.
+  * When the code’s API doesn’t guide you through what is and what isn’t allowed to be done with that code, you have to keep a lot of information in mind to make sure you don’t introduce inconsistencies with new code changes.
+
+### 5.2.4 Leaking implementation details: An example with state
+*  Let’s also look at an example with state. 
+* Another guideline flows from the definition of a well-designed API: 
+  * you should expose the absolute minimum number of operations and state.
+
+## 5.3 The relationship between mocks and test fragility
+### 5.3.1 Defining hexagonal architecture
+### 5.3.2 Intra-system vs. inter-system communications
+* Intra-system communications are implementation details because the collaborations your domain classes go through in order to perform an operation are not part of their observable behavior. 
+  * These collaborations don’t have an immediate connection to the client’s goal. Thus, coupling to such collaborations leads to fragile tests.
+* Inter-system communications are a different matter. 
+  * Unlike collaborations between classes inside your application, the way your system talks to the external world forms the observable behavior of that system as a whole. 
+  * It’s part of the contract your application must hold at all times (figure 5.12).
+* The use of mocks is beneficial when verifying the communication pattern between your system and external applications.
+  * Conversely, using mocks to verify communications between classes inside your system results in tests that couple to implementation details and therefore fall short of the resistance-to-refactoring metric.
+### 5.3.3 Intra-system vs. inter-system communications: An example
+* In the following listing, the CustomerController class is an application service that orchestrates the work between domain classes `(Customer, Product, Store)` and the external application `(EmailGateway, which is a proxy to an SMTP service)`.
+  ```
+  // Listing 5.9 Connecting the domain model with external applications
+  public class CustomerController {
+      public bool Purchase(int customerId, int productId, int quantity) {
+          Customer customer = _customerRepository.GetById(customerId);
+          Product product = _productRepository.GetById(productId);
+  
+          bool isSuccess = customer.Purchase(_mainStore, product, quantity);
+  
+          if (isSuccess) {
+              _emailGateway.SendReceipt(
+                  customer.Email, product.Name, quantity);
+          }
+  
+          return isSuccess;
+      }
+  }
+  ```
+  * The client of the application is the third-party system. 
+  * This system’s goal is to make a purchase, and it expects the cus- tomer to receive a confirmation email as part of the successful outcome.
+  * The call to the SMTP service is a legitimate reason to do mocking. 
+    * It doesn’t lead to test fragility because you want to make sure this type of communication stays in place even after refactoring.
+
+  ```
+  // Listing 5.10 Mocking that doesn’t lead to fragile tests
+  public void Successful_purchase() {
+      var mock = new Mock < IEmailGateway > ();
+      var sut = new CustomerController(mock.Object);
+      
+      bool isSuccess = sut.Purchase(customerId: 1, productId: 2, quantity: 5);
+      
+      Assert.True(isSuccess);
+      mock.Verify( // Verifies that the system sent a receipt about the purchase
+          x => x.SendReceipt("customer@email.com", "Shampoo", 5),
+          Times.Once
+      );
+  }
+
+  // Listing 5.11 Mocking that leads to fragile tests
+  public void Purchase_succeeds_when_enough_inventory() {
+      var storeMock = new Mock < IStore > ();
+      storeMock
+          .Setup(x => x.HasEnoughInventory(Product.Shampoo, 5))
+          .Returns(true);
+      var customer = new Customer();
+      
+      bool success = customer.Purchase(storeMock.Object, Product.Shampoo, 5);
+      
+      Assert.True(success);
+      storeMock.Verify(
+          x => x.RemoveInventory(Product.Shampoo, 5),
+          Times.Once
+      );
+  }
+  ```
+    * Unlike the communication between `CustomerController` and the SMTP service, the `RemoveInventory()` method call from Customer to Store doesn’t cross the application boundary: both the caller and the recipient reside inside the application. 
+    * Also, this method is neither an operation nor a state that helps the client achieve its goals. 
+    * The client of these two domain classes is `CustomerController` with the goal of making a purchase. 
+
+## 5.4 The classical vs. London schools of unit testing, revisited
+* In chapter 2, I mentioned that I prefer the classical school of unit testing over the London school. I hope now you can see why. 
+  * The London school encourages the use of mocks for all but immutable dependencies and doesn’t differentiate between intra-system and inter-system communications. 
+  * As a result, tests check communications between classes just as much as they check communications between your application and external systems.
+* This indiscriminate use of mocks is why following the London school often results in tests that couple to implementation details and thus lack resistance to refactoring.
+
+### 5.4.1 Not all out-of-process dependencies should be mocked out
+* types of dependencies (refer to chapter 2 for more details):
+  * `Shared dependency` — A dependency shared by tests (not production code)
+  * `Out-of-process dependency` — A dependency hosted by a process other than the pro- gram’s execution process (for example, a database, a message bus, or an SMTP service)
+  * `Private dependency` — Any dependency that is not shared
+* The classical school recommends avoiding shared dependencies because they provide the means for tests to interfere with each other’s execution context and thus prevent those tests from running in parallel. 
+  * The ability for tests to run in parallel, sequentially, and in any order is called `test isolation`.
+* If a shared dependency is not out-of-process, then it’s easy to avoid reusing it in tests by providing a new instance of it on each test run. 
+  * In cases where the shared dependency is out-of-process, testing becomes more complicated.
+  * The usual approach is to replace such dependencies with test doubles—mocks and stubs.
+* Not all out-of-process dependencies should be mocked out, though.
+  * `If an out-of- process dependency is only accessible through your application, then communications with such a dependency are not part of your system’s observable behavior.`
+  * An out-of-process dependency that can’t be observed externally, in effect, acts as part of your application (figure 5.14).
+    * Figure 5.14 Communications with an out-of-process dependency that can’t be observed externally are implementation details. They don’t have to stay in place after refactoring and therefore shouldn’t be verified with mocks.
+    * A good example here is an application database: a database that is used only by your application. 
+    * No external system has access to this database. Therefore, you can modify the communication pattern between your system and the application database in any way you like, as long as it doesn’t break existing functionality. 
+    * Because that database is completely hidden from the eyes of the clients, you can even replace it with an entirely different storage mechanism, and no one will notice.
+  * The use of mocks for out-of-process dependencies that you have a full control over also leads to brittle tests.
+
+### 5.4.2 Using mocks to verify behavior
+* Mocks are often said to verify behavior. 
+  * In the vast majority of cases, they don’t. 
+  * The way each individual class interacts with neighboring classes in order to achieve some goal has nothing to do with observable behavior; it’s an implementation detail. 
+  * Such a level of detail is too granular. What matters is the behavior that can be traced back to the client goals.
+* Mocks have something to do with behavior only when they verify interactions that cross the application boundary and only when the side effects of those interactions are visible to the external world.
+
+# Chapter 6 Styles of unit testing

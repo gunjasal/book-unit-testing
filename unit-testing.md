@@ -997,3 +997,653 @@ public void IsDeliveryValid_InvalidDate_ReturnsFalse() {
 * Mocks have something to do with behavior only when they verify interactions that cross the application boundary and only when the side effects of those interactions are visible to the external world.
 
 # Chapter 6 Styles of unit testing
+* There are three such styles: output-based, state-based, and communication- based testing. 
+  * Among the three, the output-based style produces tests of the highest quality, state-based testing is the second-best choice, and communication-based testing should be used only occasionally.
+
+## 6.1 The three styles of unit testing
+* As I mentioned in the chapter introduction, there are three styles of unit testing:
+  * Output-based testing
+  * State-based testing
+  * Communication-based testing
+* You can employ one, two, or even all three styles together in a single test.
+
+### 6.1.1 Defining the output-based style
+* The first style of unit testing is the `output-based` style, where you feed an input to the system under test (SUT) and check the output it produces (figure 6.1). 
+  * This style of unit testing is only applicable to code that doesn’t change a global or internal state, so the only component to verify is its return value.
+  * The output-based style of unit testing is also known as functional. This name takes root in functional programming, a method of programming that emphasizes a preference for side-effect-free code.
+  ```
+  // Listing 6.1 Output-based testing
+  public class PriceEngine {
+      public decimal CalculateDiscount(params Product[] products) {
+          decimal discount = products.Length * 0.01;
+          return Math.Min(discount, 0.2);
+      }
+  }
+
+  public void Discount_of_two_products() {
+      var product1 = new Product("Hand wash");
+      var product2 = new Product("Shampoo");
+      var sut = new PriceEngine();
+
+      decimal discount = sut.CalculateDiscount(product1, product2);
+
+      Assert.Equal(0.02, discount);
+  }
+  ```
+### 6.1.2 Defining the state-based style
+* The `state-based` style is about verifying the state of the system after an operation is com plete (figure 6.3). 
+  * The term state in this style of testing can refer to the state 
+    * of the SUT itself, 
+    * of one of its collaborators, 
+    * or of an out-of-process dependency, such as the database or the filesystem.
+  ```
+  // Listing 6.2 State-based testing
+  public class Order {
+      private readonly List < Product > _products = new List < Product > ();
+      public IReadOnlyList < Product > Products => _products.ToList();
+
+      public void AddProduct(Product product) {
+          _products.Add(product);
+      }
+  }
+
+  public void Adding_a_product_to_an_order() {
+      var product = new Product("Hand wash");
+      var sut = new Order();
+
+      sut.AddProduct(product);
+
+      Assert.Equal(1, sut.Products.Count);
+      Assert.Equal(product, sut.Products[0]);
+  }
+  ```
+### 6.1.3 Defining the communication-based style
+* Finally, the third style of unit testing is `communication-based` testing. 
+  * This style uses mocks to verify communications between the system under test and its collaborators (figure 6.4).
+  ```
+  // Listing 6.3 Communication-based testing
+  public void Sending_a_greetings_email() {
+      var emailGatewayMock = new Mock <IEmailGateway> ();
+      var sut = new Controller(emailGatewayMock.Object);
+      
+      sut.GreetUser("user@email.com");
+      
+      emailGatewayMock.Verify(
+          x => x.SendGreetingsEmail("user@email.com"),
+          Times.Once
+      );
+  }
+  ```
+
+## 6.2 Comparing the three styles of unit testing
+* What’s interesting is comparing them to each other using the four attributes of a good unit test. Here are those attributes again (refer to chapter 4 for more details):
+  * Protection against regressions 
+  * Resistance to refactoring
+  * Fast feedback
+  * Maintainability
+
+### 6.2.1 Comparing the styles using the metrics of protection against regressions and feedback speed
+* This metric is a product of the following three characteristics:
+  * The amount of code that is executed during the test 
+  * The complexity of that code
+  * Its domain significance
+* Generally, you can write a test that exercises as much or as little code as you like; no particular style provides a benefit in this area.
+* The same is true for the code’s complexity and domain significance.
+  * The only exception is the communication-based style: overusing it can result in shallow tests that verify only a thin slice of code and mock out everything else. 
+  * Such shallowness is not a definitive feature of communication-based testing, though, but rather is an extreme case of abusing this technique.
+
+### 6.2.2 Comparing the styles using the metric of resistance to refactoring
+* When it comes to the metric of resistance to refactoring, the situation is different. Resistance to refactoring is the measure of how many false positives (false alarms) tests gen- erate during refactorings. 
+  * False positives, in turn, are a result of tests coupling to code’s implementation details as opposed to observable behavior.
+* Output-based testing provides the best protection against false positives because the resulting tests couple only to the method under test.
+* State-based testing is usually more prone to false positives. In addition to the method under test, such tests also work with the class’s state. 
+  * Probabilistically speaking, the greater the coupling between the test and the production code, the greater the chance for this test to tie to a leaking implementation detail. 
+* Communication-based testing is the most vulnerable to false alarms. As you may remember from chapter 5, the vast majority of tests that check interactions with test doubles end up being brittle. 
+  * This is always the case for interactions with stubs—you should never check such interactions. 
+  * `Mocks are fine only when they verify interactions that cross the application boundary and only when the side effects of those interactions are visible to the external world.`
+  * You can reduce the number of false positives to a minimum by maintaining proper encapsulation and coupling tests to observable behavior only.
+
+### 6.2.3 Comparing the styles using the metric of maintainability
+* Maintainability evaluates the unit tests’ maintenance costs and is defined by the following two characteristics:
+  * How hard it is to understand the test, which is a function of the test’s size
+  * How hard it is to run the test, which is a function of how many out-of-process dependencies the test works with directly
+* Larger tests are less maintainable because they are harder to grasp or change when needed.
+* Similarly, a test that directly works with one or several out-of-process dependencies (such as the database) is less maintainable because you need to spend time keeping those out-of-process dependencies operational: rebooting the database server, resolving network connectivity issues, and so on.
+* MAINTAINABILITY OF OUTPUT-BASED TESTS
+  * Compared with the other two types of testing, output-based testing is the most main- tainable. 
+* MAINTAINABILITY OF STATE-BASED TESTS
+  * State-based tests are normally less maintainable than output-based ones. This is because state verification often takes up more space than output verification.
+    ```
+    // Listing 6.4 State verification that takes up a lot of space
+    public void Adding_a_comment_to_an_article() {
+        var sut = new Article();
+        var text = "Comment text";
+        var author = "John Doe";
+        var now = new DateTime(2019, 4, 1);
+
+        sut.AddComment(text, author, now);
+
+        Assert.Equal(1, sut.Comments.Count);
+        Assert.Equal(text, sut.Comments[0].Text);
+        Assert.Equal(author, sut.Comments[0].Author);
+        Assert.Equal(now, sut.Comments[0].DateCreated);
+    }
+    ```
+  * Although this test is simplified and con- tains just a single comment, its assertion part already spans four lines. 
+    * State-based tests often need to verify much more data than that and, therefore, can grow in size significantly.
+    ```
+    // Listing 6.5 Using helper methods in assertions
+    public void Adding_a_comment_to_an_article() {
+        var sut = new Article();
+        var text = "Comment text";
+        var author = "John Doe";
+        var now = new DateTime(2019, 4, 1);
+
+        sut.AddComment(text, author, now);
+
+        sut.ShouldContainNumberOfComments(1).WithComment(text, author, now); // helper method
+    }
+    ```
+  * Another way to shorten a state-based test is to define equality members in the class that is being asserted.
+    ```
+    // Listing 6.6 Comment compared by value
+    public void Adding_a_comment_to_an_article() {
+        var sut = new Article();
+        var comment = new Comment(
+            "Comment text",
+            "John Doe",
+            new DateTime(2019, 4, 1));
+
+        sut.AddComment(comment.Text, comment.Author, comment.DateCreated);
+        
+        sut.Comments.Should().BeEquivalentTo(comment);
+    }
+    ```
+  * This is a powerful technique, but it works only when the class is inherently a `value` and can be converted into a `value object`.
+    * Otherwise, it leads to code pollution (pollut- ing production code base with code whose sole purpose is to enable or, as in this case, simplify unit testing).
+  * As you can see, these two techniques—using helper methods and converting classes into value objects—are applicable only occasionally. 
+* MAINTAINABILITY OF COMMUNICATION-BASED TESTS
+  * Communication-based tests score worse than output-based and state-based tests on the maintainability metric. 
+  * Communication-based testing requires setting up test doubles and interaction assertions, and that takes up a lot of space.
+    * Tests become even larger and less maintainable when you have mock chains (mocks or stubs returning other mocks, which also return mocks, and so on, several layers deep).
+
+### 6.2.4 Comparing the styles: The results
+* Output-based testing shows the best results. This style produces tests that rarely couple to implementation details and thus don’t require much due diligence to main- tain proper resistance to refactoring. Such tests are also the most maintainable due to their conciseness and lack of out-of-process dependencies.
+* Always prefer output-based testing over everything else. Unfortunately, it’s easier said than done. 
+  * This style of unit testing is only applicable to code that is written in a functional way, which is rarely the case for most object-oriented programming languages.
+
+## 6.3 Understanding functional architecture
+* For a deeper look at functional programming, see Scott Wlaschin’s website and books at https://fsharpforfunandprofit.com/books.
+### 6.3.1 What is functional programming?
+* Functional programming is programming with mathematical functions.
+* Let’s take the `CalculateDiscount()` method from listing 6.1 as an example (I’m copying it here for convenience):
+  ```
+  public decimal CalculateDiscount(Product[] products)
+  {
+      decimal discount = products.Length * 0.01m;
+      return Math.Min(discount, 0.2m);
+  }
+  ```
+  * This method has 
+    * one input (a Product array) 
+    * and one output (the decimal discount), both of which are explicitly expressed in the method’s signature. 
+    * There are no hidden inputs or outputs. 
+  * On the other hand, hidden inputs and outputs make the code less testable (and less readable, too). Types of such hidden inputs and outputs include the following:
+    * `Side effects` — A side effect is an output that isn’t expressed in the method signature and, therefore, is hidden. An operation creates a side effect when it mutates the state of a class instance, updates a file on the disk, and so on.
+    * `Exceptions` — When a method throws an exception, it creates a path in the program flow that bypasses the contract established by the method’s signature. The thrown exception can be caught anywhere in the call stack, thus introducing an additional output that the method signature doesn’t convey.
+    * `A reference to an internal or external state` — For example, a method can get the current date and time using a static property such as `DateTime.Now`. It can query data from the database, or it can refer to a private mutable field. These are all inputs to the execution flow that aren’t present in the method signature and, therefore, are hidden.
+* A good rule of thumb when determining whether a method is a mathematical function is to see if you can replace a call to that method with its return value without changing the program’s behavior. The ability to replace a method call with the corresponding value is known as `referential transparency`. 
+  ```
+  // This method is a mathematical function.
+  public int Increment(int x) {
+    return x + 1; 
+  }
+  ```
+  * On the other hand, the following method is not a mathematical function. In this example, the hidden output is the change to field x (a side effect):
+    ```
+    int x = 0;
+    
+    public int Increment() {
+      x++;
+      return x; 
+    }
+    ```
+  ```
+  // Listing 6.7 Modification of an internal state
+  public Comment AddComment(string text) {
+      var comment = new Comment(text);
+      _comments.Add(comment); // Side effect
+      return comment;
+  }
+  ```
+### 6.3.2 What is functional architecture?
+* You can’t create an application that doesn’t incur any side effects whatsoever, of course. 
+  * Such an application would be impractical. 
+  * After all, side effects are what you create all applications for: updating the user’s information, adding a new order line to the shopping cart, and so on.
+* The goal of functional programming is 
+  * not to eliminate side effects altogether 
+  * but rather to introduce a separation between code that handles business logic and code that incurs side effects.
+* These two responsibilities are complex enough on their own; mixing them together multiplies the complexity and hinders code maintainability in the long run. 
+  * This is where functional architecture comes into play. It separates business logic from side effects by `pushing those side effects to the edges of a business operation.`
+  * Functional architecture 
+    * maximizes the amount of code written in a purely functional (immutable) way, while minimizing code that deals with side effects. 
+    * Immutable means unchangeable: once an object is created, its state can’t be modified. This is in contrast to a mutable object (changeable object), which can be modified after it is created.
+* The separation between business logic and side effects is done by segregating two types of code:
+  * Code that makes a decision — This code doesn’t require side effects and thus can be written using mathematical functions.
+  * Code that acts upon that decision — This code converts all the decisions made by the mathematical functions into visible bits, such as changes in the database or messages sent to a bus.
+* The code that makes decisions is often referred to as a functional core (also known as an immutable core). The code that acts upon those decisions is a mutable shell (figure 6.9).
+  * To maintain a proper separation between these two layers, you need to make sure the classes representing the decisions contain enough information for the mutable shell to act upon them without additional decision-making. 
+  * In other words, the mutable shell should be as dumb as possible. 
+  * The goal is to cover the functional core extensively with output-based tests and leave the mutable shell to a much smaller number of integration tests.
+
+* Encapsulation and immutability
+  * Like encapsulation, functional architecture (in general) and immutability (in particular) serve the same goal as unit testing: enabling sustainable growth of your software project.
+    * In fact, there’s a deep connection between the concepts of encapsulation and immutability.
+  * Encapsulation safeguards the class’s internals from corruption by
+    * Reducing the API surface area that allows for data modification 
+    * Putting the remaining APIs under scrutiny
+  * Immutability tackles this issue of preserving invariants from another angle. With immutable classes, you don’t need to worry about state corruption because it’s impossible to corrupt something that cannot be changed in the first place. 
+    * As a consequence, there’s no need for encapsulation in functional programming.
+
+### 6.3.3 Comparing functional and hexagonal architectures
+* There are a lot of similarities between functional and hexagonal architectures. 
+  * Both of them are built around the idea of separation of concerns.
+  * The details of that sepa- ration vary, though.
+* As you may remember from chapter 5, the hexagonal architecture differentiates the domain layer and the application services layer (figure 6.10). 
+  * The domain layer is accountable for business logic while the application services layer, for communication with external applications such as a database or an SMTP service. 
+    * This is very similar to functional architecture, where you introduce the separation of decisions and actions.
+  * Another similarity is the one-way flow of dependencies. 
+    * In the hexagonal architecture, classes inside the domain layer should only depend on each other; they should not depend on classes from the application services layer. 
+    * Likewise, the immutable core in functional architecture doesn’t depend on the mutable shell. 
+    * It’s self-sufficient and can work in isolation from the outer layers. 
+    * This is what makes functional architecture so testable: you can strip the immutable core from the mutable shell entirely and simulate the inputs that the shell provides using simple values.
+* The difference between the two is in their treatment of side effects. 
+  * Functional architecture pushes all side effects out of the immutable core to the edges of a business operation. 
+    * These edges are handled by the mutable shell. 
+  * On the other hand, the hexagonal architecture is fine with side effects made by the domain layer, as long as they are limited to that domain layer only.
+    * All modifications in hexagonal architecture should be contained within the domain layer and not cross that layer’s boundary. 
+    * For example, a domain class instance can’t persist something to the database directly, but it can change its own state. 
+    * An application service will then pick up this change and apply it to the database.
+* Functional architecture is a subset of the hexagonal architecture. You can view functional architecture as the hexagonal architecture taken to an extreme.
+
+## 6.4 Transitioning to functional architecture and output- based testing
+* In this section, we’ll take a sample application and refactor it toward functional architecture. You’ll see two refactoring stages:
+  * Moving from using an out-of-process dependency to using mocks 
+  * Moving from using mocks to using functional architecture
+
+### 6.4.1 Introducing an audit system
+* The AuditManager class is hard to test as-is, because it’s tightly coupled to the file-system. Before the test, you’d need to put files in the right place, and after the test finishes, you’d read those files, check their contents, and clear them out (figure 6.12).
+  ```
+  // Listing 6.8 Initial implementation of the audit system
+  public class AuditManager {
+      private readonly int _maxEntriesPerFile;
+      private readonly string _directoryName;
+
+      public AuditManager(int maxEntriesPerFile, string directoryName) {
+          _maxEntriesPerFile = maxEntriesPerFile;
+          _directoryName = directoryName;
+      }
+
+      public void AddRecord(string visitorName, DateTime timeOfVisit) {
+          string[] filePaths = Directory.GetFiles(_directoryName);
+          (int index, string path)[] sorted = SortByIndex(filePaths);
+          
+          string newRecord = visitorName + ';' + timeOfVisit;
+          
+          if (sorted.Length == 0) {
+              string newFile = Path.Combine(_directoryName, "audit_1.txt");
+              File.WriteAllText(newFile, newRecord);
+              return;
+          }
+          
+          (int currentFileIndex, string currentFilePath) = sorted.Last();
+          List < string > lines = File.ReadAllLines(currentFilePath).ToList();
+          
+          if (lines.Count < _maxEntriesPerFile) {
+              lines.Add(newRecord);
+              string newContent = string.Join("\r\n", lines);
+              File.WriteAllText(currentFilePath, newContent);
+          } else {
+              int newIndex = currentFileIndex + 1;
+              string newName = $ "audit_{newIndex}.txt";
+              string newFile = Path.Combine(_directoryName, newName);
+              File.WriteAllText(newFile, newRecord);
+          }
+      }
+  }
+  ```
+  * You won’t be able to parallelize such tests—at least, not without additional effort that would significantly increase maintenance costs. The bottleneck is the filesys- tem: it’s a shared dependency through which tests can interfere with each other’s execution flow.
+  * The filesystem also makes the tests slow. Maintainability suffers, too, because you have to make sure the working directory exists and is accessible to tests—both on your local machine and on the build server. Table 6.2 sums up the scoring.
+  * By the way, tests working directly with the filesystem don’t fit the definition of a unit test. They don’t comply with the second and the third attributes of a unit test, thereby falling into the category of integration tests (see chapter 2 for more details):
+    * A unit test verifies a single unit of behavior, 
+    * Does it quickly,
+    * And does it in isolation from other tests.
+
+### 6.4.2 Using mocks to decouple tests from the filesystem
+```
+// Listing 6.9 Injecting the filesystem explicitly via the constructor
+public class AuditManager {
+    private readonly int _maxEntriesPerFile;
+    private readonly string _directoryName;
+    private readonly IFileSystem _fileSystem; // The new interface represents the filesystem.
+
+    public AuditManager(
+        int maxEntriesPerFile,
+        string directoryName,
+        IFileSystem fileSystem) {
+        _maxEntriesPerFile = maxEntriesPerFile;
+        _directoryName = directoryName;
+        _fileSystem = fileSystem;
+    }
+}
+
+// Listing 6.10 Using the new IFileSystem interface 
+public void AddRecord(string visitorName, DateTime timeOfVisit) {
+    string[] filePaths = _fileSystem.GetFiles(_directoryName); // The new interface in action
+    (int index, string path)[] sorted = SortByIndex(filePaths);
+
+    string newRecord = visitorName + ';' + timeOfVisit;
+
+    if (sorted.Length == 0) {
+        string newFile = Path.Combine(_directoryName, "audit_1.txt");
+        _fileSystem.WriteAllText(newFile, newRecord); // The new interface in action
+        return;
+    }
+
+    (int currentFileIndex, string currentFilePath) = sorted.Last();
+    List < string > lines = _fileSystem.ReadAllLines(currentFilePath);
+
+    if (lines.Count < _maxEntriesPerFile) {
+        lines.Add(newRecord);
+        string newContent = string.Join("\r\n", lines);
+        _fileSystem.WriteAllText(currentFilePath, newContent); // The new interface in action
+    } else {
+        int newIndex = currentFileIndex + 1;
+        string newName = $ "audit_{newIndex}.txt";
+        string newFile = Path.Combine(_directoryName, newName);
+        _fileSystem.WriteAllText(newFile, newRecord); // The new interface in action
+    }
+}
+
+public interface IFileSystem
+{
+    string[] GetFiles(string directoryName);
+    void WriteAllText(string filePath, string content);
+    List<string> ReadAllLines(string filePath);
+}
+```
+* Now that AuditManager is decoupled from the filesystem, the shared dependency is gone, and tests can execute independently from each other. Here’s one such test.
+  ```
+  // Listing 6.11 Checking the audit system’s behavior using a mock
+  public void A_new_file_is_created_when_the_current_file_overflows() {
+      var fileSystemMock = new Mock<IFileSystem>();
+      fileSystemMock
+          .Setup(x => x.GetFiles("audits"))
+          .Returns(new string[] {
+              @"audits\audit_1.txt",
+              @"audits\audit_2.txt"
+          });
+      fileSystemMock
+          .Setup(x => x.ReadAllLines(@"audits\audit_2.txt"))
+          .Returns(new List<string> {
+              "Peter; 2019-04-06T16:30:00",
+              "Jane; 2019-04-06T16:40:00",
+              "Jack; 2019-04-06T17:00:00"
+          });
+      var sut = new AuditManager(3, "audits", fileSystemMock.Object);
+
+      sut.AddRecord("Alice", DateTime.Parse("2019-04-06T18:00:00"));
+
+      fileSystemMock.Verify(x => x.WriteAllText(
+          @"audits\audit_3.txt",
+          "Alice;2019-04-06T18:00:00"));
+  }
+  ```
+  * This test verifies that when the number of entries in the current file reaches the limit (3, in this example), a new file with a single audit entry is created. Note that this is a legitimate use of mocks.
+  * The application creates files that are visible to end users (assuming that those users use another program to read the files, be it specialized soft- ware or a simple notepad.exe). 
+  * Therefore, communications with the filesystem and the side effects of these communications (that is, the changes in files) are part of the application’s observable behavior.
+
+### 6.4.3 Refactoring toward functional architecture
+* Instead of hiding side effects behind an interface and injecting that interface into AuditManager, you can move those side effects out of the class entirely. Audit- Manager is then only responsible for making a decision about what to do with the files.
+* A new class, Persister, acts on that decision and applies updates to the filesys- tem (figure 6.14).
+  ```
+  // Listing 6.12 The AuditManager class after refactoring
+  public class AuditManager {
+      private readonly int _maxEntriesPerFile;
+
+      public AuditManager(int maxEntriesPerFile) {
+          _maxEntriesPerFile = maxEntriesPerFile;
+      }
+
+      public FileUpdate AddRecord(
+          FileContent[] files,
+          string visitorName,
+          DateTime timeOfVisit) 
+      {
+          (int index, FileContent file)[] sorted = SortByIndex(files);
+          string newRecord = visitorName + ';' + timeOfVisit;
+          
+          if (sorted.Length == 0) {
+              return new FileUpdate("audit_1.txt", newRecord);
+          }
+
+          (int currentFileIndex, FileContent currentFile) = sorted.Last();
+          List<string> lines = currentFile.Lines.ToList();
+
+          if (lines.Count < _maxEntriesPerFile) {
+              lines.Add(newRecord);
+              string newContent = string.Join("\r\n", lines);
+              return new FileUpdate(currentFile.FileName, newContent);
+          } else {
+              int newIndex = currentFileIndex + 1;
+              string newName = $ "audit_{newIndex}.txt";
+              return new FileUpdate(newName, newRecord);
+          }
+      }
+  }
+
+  public class FileContent {
+      public readonly string FileName;
+      public readonly string[] Lines;
+      public FileContent(string fileName, string[] lines)
+      {
+          FileName = fileName;
+          Lines = lines;
+      }
+  }
+
+  public class FileUpdate
+  {
+      public readonly string FileName;
+      public readonly string NewContent;
+      public FileUpdate(string fileName, string newContent)
+      {
+          FileName = fileName;
+          NewContent = newContent;
+      }
+  }
+
+  // Listing 6.13 The mutable shell acting on AuditManager’s decision
+  public class Persister
+  {
+      public FileContent[] ReadDirectory(string directoryName)
+      {
+          return Directory
+              .GetFiles(directoryName)
+              .Select(x => new FileContent(
+                  Path.GetFileName(x),
+                  File.ReadAllLines(x))
+              ).ToArray();
+      }
+      public void ApplyUpdate(string directoryName, FileUpdate update)
+      {
+          string filePath = Path.Combine(directoryName, update.FileName);
+          File.WriteAllText(filePath, update.NewContent);
+      }
+  }
+  ```
+  * Notice how trivial this class is. All it does is read content from the working directory and apply updates it receives from AuditManager back to that working directory. 
+  * It has no branching (no if statements); all the complexity resides in the AuditManager class. `This is the separation between business logic and side effects in action.`
+  * To maintain such a separation, you need to keep the interface of FileContent and FileUpdate as close as possible to that of the framework’s built-in file-interaction commands. 
+  ```
+  // Listing 6.14 Gluing together the functional core and mutable shell
+  public class ApplicationService {
+      private readonly string _directoryName;
+      private readonly AuditManager _auditManager;
+      private readonly Persister _persister;
+
+      public ApplicationService(string directoryName, int maxEntriesPerFile) {
+          _directoryName = directoryName;
+          _auditManager = new AuditManager(maxEntriesPerFile);
+          _persister = new Persister();
+      }
+
+      public void AddRecord(string visitorName, DateTime timeOfVisit) {
+          FileContent[] files = _persister.ReadDirectory(_directoryName);
+          FileUpdate update = _auditManager.AddRecord(files, visitorName, timeOfVisit);
+          _persister.ApplyUpdate(_directoryName, update);
+      }
+  }
+  ```
+  * Along with gluing the functional core together with the mutable shell, the application service also provides an entry point to the system for external clients (figure 6.15).
+  ```
+  // Listing 6.15 The test without mocks
+  public void A_new_file_is_created_when_the_current_file_overflows() {
+      var sut = new AuditManager(3);
+      var files = new FileContent[] {
+          new FileContent("audit_1.txt", new string[0]),
+          new FileContent("audit_2.txt", new string[] {
+              "Peter; 2019-04-06T16:30:00",
+              "Jane; 2019-04-06T16:40:00",
+              "Jack; 2019-04-06T17:00:00"
+          })
+      };
+      
+      FileUpdate update = sut.AddRecord(files, "Alice", DateTime.Parse("2019-04-06T18:00:00"));
+
+      Assert.Equal("audit_3.txt", update.FileName);
+      Assert.Equal("Alice;2019-04-06T18:00:00", update.NewContent);
+  }
+  ```
+
+### 6.4.4 Looking forward to further developments
+
+## 6.5 Understanding the drawbacks of functional architecture
+* Unfortunately, functional architecture isn’t always attainable. 
+  * And even when it is, the maintainability benefits are often offset by a performance impact and increase in the size of the code base.
+
+### 6.5.1 Applicability of functional architecture
+* Functional architecture worked for our audit system because this system could gather all the inputs up front, before making a decision. 
+  * Often, though, the execution flow is less straightforward. 
+  * You might need to query additional data from an out-of-process dependency, based on an intermediate result of the decision-making process.
+* Collaborators vs. values
+  * You may have noticed that AuditManager’s AddRecord() method has a dependency that’s not present in its signature: the `_maxEntriesPerFile `field. The audit manager refers to this field to make a decision to either append an existing audit file or create a new one.
+  * Although this dependency isn’t present among the method’s arguments, it’s not hid den. It can be derived from the class’s constructor signature. 
+  * And because the `_maxEntriesPerFile` field is `immutable`, it stays the same between the class instantiation and the call to `AddRecord()`. 
+    * In other words, that field is a value.
+  * The situation with the IDatabase dependency is different because it’s a collaborator, not a value like _maxEntriesPerFile. As you may remember from chapter 2, a `collaborator` is a dependency that is one or the other of the following:
+    * Mutable (allows for modification of its state)
+    * A proxy to data that is not yet in memory (a shared dependency)
+  * The `IDatabase` instance falls into the second category and, therefore, is a collabo- rator. It requires an additional call to an out-of-process dependency and thus pre- cludes the use of output-based testing.
+
+### 6.5.2 Performance drawbacks
+* The performance impact on the system as a whole is a common argument against functional architecture. Note that it’s not the performance of tests that suffers. 
+  * The output-based tests we ended up with work as fast as the tests with mocks. 
+  * It’s that the system itself now has to do more calls to out-of-process dependencies and becomes less performant. 
+  * The initial version of the audit system didn’t read all files from the working directory, and neither did the version with mocks. 
+    * But the final version does in order to comply with the read-decide-act approach.
+* The choice between a functional architecture and a more traditional one is `a trade-off between performance and code maintainability (both production and test code)`. 
+  * In some systems where the performance impact is not as noticeable, it’s better to go with functional architecture for additional gains in maintainability. 
+  * In others, you might need to make the opposite choice. There’s no one-size-fits-all solution.
+
+### 6.5.3 Increase in the code base size
+* The same is true for the size of the code base. Functional architecture requires a clear separation between the functional (immutable) core and the mutable shell. 
+  * This necessitates additional coding initially, 
+  * although it ultimately results in reduced code complexity and gains in maintainability.
+* Not all projects exhibit a high enough degree of complexity to justify such an initial investment, though. 
+  * Some code bases aren’t that significant from a business perspective or are just plain too simple. 
+  * It doesn’t make sense to use functional architecture in such projects because the initial investment will never pay off. 
+  * Always apply functional architecture strategically, taking into account the complexity and importance of your system.
+* Finally, don’t go for purity of the functional approach if that purity comes at too high a cost. 
+  * In most projects, you won’t be able to make the domain model fully immutable and thus can’t rely solely on output-based tests, at least not when using an OOP language like C# or Java. 
+  * In most cases, you’ll have a combination of output-based and state-based styles, with a small mix of communication-based tests, and that’s fine.
+  * The goal of this chapter is not to incite you to transition all your tests toward the output-based style; the goal is to transition as many of them as reasonably possible.
+
+# Chapter 7 Refactoring toward valuable unit tests
+* In chapter 1, I defined the properties of a good unit test suite:
+  * It is integrated into the development cycle.
+  * It targets only the most important parts of your code base.
+  * It provides maximum value with minimum maintenance costs. To achieve this last attribute, you need to be able to:
+    * Recognize a valuable test (and, by extension, a test of low value).
+    * Write a valuable test.
+##
+### 
+### 
+### 
+### 
+
+##
+### 
+### 
+### 
+### 
+
+## Reference
+* https://site.mockito.org/
+* [manning - unit testing](https://freecontent.manning.com/what-is-a-unit-test-part-2-classical-vs-london-schools/)
+* [detroit vs london school](https://medium.com/@adrianbooth/test-driven-development-wars-detroit-vs-london-classicist-vs-mockist-9956c78ae95f)
+* [mocksArentStubs](https://martinfowler.com/articles/mocksArentStubs.html)
+* [@SpyBean @MockBean 의도적으로 사용하지 않기](https://jojoldu.tistory.com/320)
+* [TDD에 대한 몇 가지 질문](https://brunch.co.kr/@cleancode/44)
+* [1. 테스트하기 좋은 코드 - 테스트하기 어려운 코드](https://jojoldu.tistory.com/674)
+  * [Testing, Oh my! by Jin-Wook Chung](https://jwchung.github.io/testing-oh-my)
+  * [스프링캠프 2019 [Track 2 Session 3] : 무엇을 테스트할 것인가? 어떻게 테스트할 것인가? (권용근)](https://www.youtube.com/watch?v=YdtknE_yPk4)
+* [HumbleObject](https://martinfowler.com/bliki/HumbleObject.html)
+* [TDD is dead](https://dhh.dk/2014/tdd-is-dead-long-live-testing.html)
+
+* https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-best-practices#characteristics-of-a-good-unit-test
+* https://github.com/jojoldu/review/blob/master/OKKY_TDD/README.md
+https://github.com/msbaek/atdd-example
+
+---
+tdd/bdd
+test (unit test vs integration test , system test , endpoint integration test)
+unit testing
+integration testing
+  transaction
+  concurrency
+end-to-end testing
+
+test fixture
+test double
+
+what to test?
+  everthing (clean coder) vs domain-heart vs test-reflief
+```
+// You Must Know It Works, Clean Coder, p.46
+
+How much of the code should be tested with these automated unit tests? Do
+I really need to answer that question? All of it! All. Of. It.
+
+Am I suggesting 100% test coverage? No, I’m not suggesting it. I’m demanding it.
+Every single line of code that you write should be tested. Period.
+
+Isn’t that unrealistic? Of course not. You only write code because you expect it
+to get executed. If you expect it to get executed, you ought to know that it
+works. The only way to know this is to test it.
+```
+does this (test) code hurts?
+testing test codes
+
+spring annotations
+  * https://reflectoring.io/spring-boot-test/
+  * https://dev.to/stealthmusic/why-you-should-start-using-junit-5-5gk2
+  @SpringBootTest
+  @WebMvcTest
+  @MockMvc
+  @Nested
+  ...
+
+testAny
+---
+Pragmatic Testing in Spring

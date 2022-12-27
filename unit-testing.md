@@ -1576,8 +1576,126 @@ public interface IFileSystem
   * It provides maximum value with minimum maintenance costs. To achieve this last attribute, you need to be able to:
     * Recognize a valuable test (and, by extension, a test of low value).
     * Write a valuable test.
+* Chapter 4 covered the topic of recognizing a valuable test using the four attributes: protection against regressions, resistance to refactoring, fast feedback, and main- tainability. 
+* And chapter 5 expanded on the most important one of the four: resis- tance to refactoring.
+* You saw an example of a code base transformation in chapter 6, where we refac- tored an audit system toward a functional architecture and, as a result, were able to apply output-based testing. 
+
+## 7.1 Identifying the code to refactor
+* It’s rarely possible to significantly improve a test suite without refactoring the underlying code. 
+
+### 7.1.1 The four types of code
+* In this section, I describe the four types of code that serve as a foundation for the rest of this chapter.
+  * All production code can be categorized along two dimensions: 
+    * Complexity or domain significance
+    * The number of collaborators
+  * `Code complexity` is defined by the number of decision-making (branching) points in the code. The greater that number, the higher the complexity.
+  * `Domain significance` shows how significant the code is for the problem domain of your project. 
+    * Normally, all `code in the domain layer` has a direct connection to the end users’ goals and thus exhibits a high domain significance. 
+    * On the other hand, `utility code` doesn’t have such a connection.
+* `Complex code and code that has domain significance` benefit from unit testing the most because the corresponding tests have great protection against regressions.
+* The second dimension is the `number of collaborators` a class or a method has.
+  * As you may remember from chapter 2, a collaborator is a dependency that is either mutable or out-of-process (or both). 
+  * Code with a large number of collaborators is expensive to test. That’s due to the maintainability metric, which depends on the size of the test.
+  * It takes space to bring collaborators to an expected condition and then check their state or interactions with them afterward. And the more collaborators there are, the larger the test becomes.
+* `The type of the collaborators also matters.` 
+  * Out-of-process collaborators are a no-go when it comes to the domain model. 
+  * They add additional maintenance costs due to the necessity to maintain complicated mock machinery in tests. 
+  * You also have to be extra prudent and only use mocks to verify interactions that cross the application boundary in order to maintain proper resistance to refactoring (refer to chapter 5 for more details). 
+  * It’s better to delegate all communications with out-of-process dependencies to classes outside the domain layer. The domain classes then will only work with in-process dependencies.
+* The combination of code complexity, its domain significance, and the number of collaborators give us the four types of code shown in figure 7.1:
+  * `Domain model and algorithms` (figure 7.1, top left)—Complex code is often part of the domain model but not in 100% of all cases. You might have a complex algorithm that’s not directly related to the problem domain.
+    * Unit testing the top-left quadrant (domain model and algorithms) gives you the best return for your efforts. The resulting unit tests are highly valuable and cheap. 
+  * `Trivial code` (figure 7.1, bottom left)—Examples of such code in C# are parameter- less constructors and one-line properties: they have few (if any) collaborators and exhibit little complexity or domain significance.
+    * Trivial code shouldn’t be tested at all; such tests have a close-to-zero value.
+  * `Controllers` (figure 7.1, bottom right)—This code doesn’t do complex or business- critical work by itself but coordinates the work of other components like domain classes and external applications.
+    * As for controllers, you should test them briefly as part of a much smaller set of the overarching integration tests (I cover this topic in part 3).
+  * `Overcomplicated code` (figure 7.1, top right)—Such code scores highly on both metrics: it has a lot of collaborators, and it’s also complex or important. An example here are fat controllers (controllers that don’t delegate complex work anywhere and do everything themselves).
+    * The most problematic type of code is the overcomplicated quadrant. It’s hard to unit test but too risky to leave without test coverage.
+    * Such code is one of the main rea- sons many people struggle with unit testing.
+* `The more important or complex the code, the fewer collaborators it should have.`
+* Getting rid of the overcomplicated code and unit testing only the domain model and algorithms is the path to a highly valuable, easily maintainable test suite. With this approach, you won’t have 100% test coverage, but you don’t need to—100% coverage shouldn’t ever be your goal. 
+  * Your goal is a test suite where each test adds significant value to the project. Refactor or get rid of all other tests. 
+  * Don’t allow them to inflate the size of your test suite.
+
+### 7.1.2 Using the Humble Object pattern to split overcomplicated code
+* To split overcomplicated code, you need to use the `Humble Object design pattern`. 
+  * This pattern was introduced by Gerard Meszaros in his book xUnit Test Patterns: Refactoring Test Code (Addison-Wesley, 2007) as one of the ways to battle code coupling, but it has a much broader application.
+* We often find that code is hard to test because it’s coupled to a framework dependency (see figure 7.3). Examples include asynchronous or multi-threaded execution, user interfaces, communication with out-of-process dependencies, and so on.
+  * To bring the logic of this code under test, you need to extract a testable part out of it. As a result, the code becomes a thin, humble wrapper around that testable part: it glues the hard-to-test dependency and the newly extracted component together, but itself contains little or no logic and thus doesn’t need to be tested (figure 7.4).
+  * hexagonal architecture advocates for the separation of business logic and communications with out-of-process dependencies. This is what the domain and application services layers are responsible for, respectively.
+  * Functional architecture goes even further and separates business logic from com- munications with all collaborators, not just out-of-process ones.
+* Another way to view the Humble Object pattern is as a means to adhere to the Single Responsibility principle, which states that each class should have only a single responsibility.
+    *  One such responsibility is always business logic; the pattern can be applied to segregate that logic from pretty much anything.
+* In our particular situation, we are interested in the separation of business logic and orchestration. You can think of these two responsibilities in terms of code depth versus code width. Your code can be either deep (complex or important) or wide (work with many collaborators), but never both (figure 7.6).
+  * You already saw the relationship between this pattern and hexagonal and functional architectures. 
+  * Other examples include the Model-View-Presenter (MVP) and the Model-View-Controller (MVC) patterns. 
+    * These two patterns help you decouple business logic (the Model part), UI concerns (the View), and the coordination between them (Presenter or Controller). 
+    * The Presenter and Controller components are humble objects: they glue the view and the model together.
+  * Another example is the Aggregate pattern from Domain-Driven Design.2 One of its goals is to reduce connectivity between classes by grouping them into clusters— aggregates.
+    * The classes are highly connected inside those clusters, but the clusters them- selves are loosely coupled.
+    * Note that improved testability is not the only reason to maintain the separation between business logic and orchestration. Such a separation also helps tackle code complexity, which is crucial for project growth, too, especially in the long run. 
+
+## 7.2 Refactoring toward valuable unit tests
+### 7.2.1 Introducing a customer management system
+### 7.2.2 Take 1: Making implicit dependencies explicit
+### 7.2.3 Take 2: Introducing an application services layer
+### 7.2.4 Take 3: Removing complexity from the application service
+### 7.2.5 Take 4: Introducing a new Company class
+
+## 7.3 Analysis of optimal unit test coverage
+### 7.3.1 Testing the domain layer and utility code
+### 7.3.2 Testing the code from the other three quadrants
+### 7.3.3 Should you test preconditions?
+* There’s no hard rule here, but the general guideline I recommend is to test all preconditions that have domain significance. 
+
+## 7.4 Handling conditional logic in controllers
+* The separation between business logic and orchestration works best when a busi- ness operation has three distinct stages:
+  * Retrieving data from storage
+  * Executing business logic
+  * Persisting data back to the storage (figure 7.10)
+* There are a lot of situations where these stages aren’t as clearcut, though. As we discussed in chapter 6, you might need to query additional data from an out-of-process depen- dency based on an intermediate result of the decision-making process (figure 7.11).
+  * As also discussed in the previous chapter, you have three options in such a situation:
+    * `Push all external reads and writes to the edges anyway.` This approach preserves the read-decide-act structure but concedes performance: the controller will call out-of-process dependencies even when there’s no need for that.
+    * `Inject the out-of-process dependencies into the domain model` and allow the business logic to directly decide when to call those dependencies.
+    * `Split the decision-making process into more granular steps` and have the controller act on each of those steps separately.
+  * The challenge is to balance the following three attributes:
+    * `Domain model testability`, which is a function of the number and type of collaborators in domain classes
+    * `Controller simplicity`, which depends on the presence of decision-making (branching) points in the controller
+    * `Performance`, as defined by the number of calls to out-of-process dependencies
+  * Each option only gives you two out of the three attributes (figure 7.12):
+    * `Pushing all external reads and writes to the edges of a business operation`—Preserves controller simplicity and keeps the domain model isolated from out-of-process dependencies (thus allowing it to remain testable) but concedes performance.
+    * `Injecting out-of-process dependencies into the domain model`—Keeps performance and the controller’s simplicity intact but damages domain model testability.
+    * `Splitting the decision-making process into more granular steps`—Helps with both performance and domain model testability but concedes controller simplicity. You’ll need to introduce decision-making points in the controller in order to manage these granular steps.  
+  * In most software projects, performance is important, so the first approach (pushing external reads and writes to the edges of a business operation) is out of the question.  
+  * The second option (injecting out-of-process dependencies into the domain model) brings most of your code into the overcomplicated quadrant on the types-of-code dia- gram.
+  * That leaves you with the third option: splitting the decision-making process into smaller steps. With this approach, you will have to make your controllers more com- plex, which will also push them closer to the overcomplicated quadrant.
+
+### 7.4.1 Using the CanExecute/Execute pattern
+* The first way to mitigate the growth of the controllers’ complexity is to use the `Can-Execute/Execute pattern`, which helps avoid leaking of business logic from the domain model to controllers.
+  ```
+  // Listing 7.10 Changing an email using the CanExecute/Execute pattern
+  public string CanChangeEmail() {
+      if (IsEmailConfirmed)
+          return "Can't change a confirmed email";
+      return null;
+  }
+
+  public void ChangeEmail(string newEmail, Company company) {
+      Precondition.Requires(CanChangeEmail() == null);
+      /* the rest of the method */
+  }
+  ```
+  * This approach provides two important benefits:
+    * The controller no longer needs to know anything about the process of changing emails. All it needs to do is call the CanChangeEmail() method to see if the operation can be done. Notice that this method can contain multiple valida- tions, all encapsulated away from the controller.
+    * The additional precondition in ChangeEmail() guarantees that the email won’t ever be changed without checking for the confirmation first.
+
+### 7.4.2 Using domain events to track changes in the domain model
+* you can track important changes in the domain model and then convert those changes into calls to out-of-process dependencies after the business operation is complete. `Domain events` help you implement such tracking.
+  * A domain event describes an event in the application that is mean- ingful to domain experts. The meaningfulness for domain experts is what differentiates domain events from regular events (such as button clicks). Domain events are often used to inform external applications about import- ant changes that have happened in your system.
+
+# Chapter 8 Why integration testing?
+
 ##
-### 
 ### 
 ### 
 ### 
@@ -1604,6 +1722,7 @@ public interface IFileSystem
 * https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-best-practices#characteristics-of-a-good-unit-test
 * https://github.com/jojoldu/review/blob/master/OKKY_TDD/README.md
 https://github.com/msbaek/atdd-example
+* [백명석 clean coders](https://www.youtube.com/playlist?list=PLeQ0NTYUDTmMM71Jn1scbEYdLFHz5ZqFA)
 
 ---
 tdd/bdd
@@ -1644,6 +1763,8 @@ spring annotations
   @Nested
   ...
 
+boundaryb
 testAny
+
 ---
-Pragmatic Testing in Spring
+Practical Testing in Spring

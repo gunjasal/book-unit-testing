@@ -1,3 +1,6 @@
+# **Part 1 The bigger picture**
+<br>
+
 # Chapter 1 The goal of unit testing
 
 ## 1.2 The goal of unit testing
@@ -495,6 +498,12 @@ public void IsDeliveryValid_InvalidDate_ReturnsFalse() {
   }
   ```
 * NOTE: The paradigm of object-oriented programming (OOP) has become a success partly because of this readability benefit. With OOP, you, too, can structure the code in a way that reads like a story.
+
+<br>
+
+---
+# **Part 2 Making your tests work for you**
+<br>
 
 # Chapter 4 The four pillars of a good unit test
 ## 4.1 Diving into the four pillars of a good unit test
@@ -1693,6 +1702,13 @@ public interface IFileSystem
 * you can track important changes in the domain model and then convert those changes into calls to out-of-process dependencies after the business operation is complete. `Domain events` help you implement such tracking.
   * A domain event describes an event in the application that is mean- ingful to domain experts. The meaningfulness for domain experts is what differentiates domain events from regular events (such as button clicks). Domain events are often used to inform external applications about import- ant changes that have happened in your system.
 
+<br>
+
+---
+
+# **Part 3 Integration Testing**
+<br>
+
 # Chapter 8 Why integration testing?
 * You can never be sure your system works as a whole if you rely on unit tests exclu- sively. Unit tests are great at verifying business logic, but it’s not enough to check that logic in a vacuum.
 
@@ -1883,6 +1899,157 @@ public interface IFileSystem
   * This is an anti-pattern. Two of their arguments are that
     * The dependency is hidden and hard to change. 
     * Testing becomes more difficult.
+
+# Chapter 9 Mocking best practices
+* As you might remember from chapter 5, a mock is a test double that helps to emu- late and examine interactions between the system under test and its dependencies. 
+  * As you might also remember from chapter 8, `mocks should only be applied to unmanaged dependencies` (interactions with such dependencies are observable by external applications). 
+  * `Using mocks for anything else results in brittle tests (tests that lack the metric of resistance to refactoring).`
+
+## 9.1 Maximizing mocks’ value
+* It’s important to limit the use of mocks to unmanaged dependencies, but that’s only the first step on the way to maximizing the value of mocks.
+
+### `9.1.1 Verifying interactions at the system edges`
+* Let’s discuss why the mocks used by the integration test in listing 9.3 aren’t ideal in terms of their protection against regressions and resistance to refactoring and how we can fix that.
+* `When mocking, always adhere to the following guideline: verify interac- tions with unmanaged dependencies at the very edges of your system.`
+  * Listing 9.5 Integration test targeting IBus
+
+### 9.1.2 Replacing mocks with spies
+* It turns out that, when it comes to classes residing at the system edges, spies are supe- rior to mocks. `Spies help you reuse code in the assertion phase, thereby reducing the test’s size and improving readability.`
+
+### 9.1.3 What about IDomainLogger?
+
+## 9.2 Mocking best practices
+* You’ve learned two major mocking best practices so far:
+  * Applying mocks to unmanaged dependencies only
+  * Verifying the interactions with those dependencies at the very edges of your system
+* In this section, I explain the remaining best practices:
+  * Using mocks in integration tests only, not in unit tests 
+  * Always verifying the number of calls made to the mock 
+  * Mocking only types that you own
+
+### 9.2.1 Mocks are for integration tests only
+* Tests on the domain model fall into the category of unit tests; tests covering con- trollers are integration tests. 
+  * `Your code should either communi- cate with out-of-process dependencies or be complex, but never both.` This principle naturally leads to the formation of two distinct layers: the domain model (that handles complexity) and controllers (that handle the communication).
+  * `Because mocks are for unmanaged dependencies only, and because controllers are the only code working with such dependencies, you should only apply mocking when testing controllers—in integration tests.`
+
+### 9.2.2 Not just one mock per test
+### 9.2.3 Verifying the number of calls
+* When it comes to communications with unmanaged dependencies, it’s important to ensure both of the following:
+  * The existence of expected calls
+  * The absence of unexpected calls
+### 9.2.4 Only mock types that you own
+* The guideline states that you should always write your own adapters on top of third-party libraries and mock those adapters instead of the underlying types.
+  * Adapters, in effect, act as an anti-corruption layer between your code and the external world. These help you to
+    * Abstract the underlying library’s complexity
+    * Only expose features you need from the library 
+    * Do that using your project’s domain language
+* `Note that the “mock your own types” guideline doesn’t apply to in-process depen- dencies. As I explained previously, mocks are for unmanaged dependencies only.`
+
+<br>
+
+---
+
+# Chapter 10 Testing the database
+
+## 10.1 Prerequisites for testing the database
+### 10.1.1 Keeping the database in the source control system
+### 10.1.2 Reference data is part of the database schema
+* `Reference data` is data that must be prepopulated in order for the application to operate properly.
+### 10.1.3 Separate instance for every developer
+### 10.1.4 State-based vs. migration-based database delivery
+* `flyway`
+
+## 10.2 Database transaction management
+### 10.2.1 Managing database transactions in production code
+### 10.2.2 Managing database transactions in integration tests
+**
+
+## 10.3 Test data life cycle
+* The shared database raises the problem of isolating integration tests from each other. To solve this problem, you need to
+  * Execute integration tests sequentially.
+  * Remove leftover data between test runs.
+### 10.3.1 Parallel vs. sequential test execution
+### 10.3.2 Clearing data between test runs
+* There are four options to clean up leftover data between test runs:
+  * Restoring a database backup before each test—This approach addresses the problem of data cleanup but is much slower than the other three options. Even with con- tainers, the removal of a container instance and creation of a new one usually takes several seconds, which quickly adds to the total test suite execution time.
+  * Cleaning up data at the end of a test—This method is fast but susceptible to skip- ping the cleanup phase. If the build server crashes in the middle of the test, or you shut down the test in the debugger, the input data remains in the database and affects further test runs.
+  * `Wrapping each test in a database transaction and never committing it`—In this case, all changes made by the test and the SUT are rolled back automatically. 
+    * This approach solves the problem of skipping the cleanup phase but poses another issue: 
+      * the introduction of an overarching transaction can lead to inconsistent behavior between the production and test environments. 
+      * `It’s the same problem as with reusing a unit of work: the additional transaction creates a setup that’s different than that in production.` (???!)
+  * `Cleaning up data at the beginning of a test—This is the best option.` It works fast, doesn’t result in inconsistent behavior, and isn’t prone to accidentally skipping the cleanup phase.
+
+### 10.3.3 Avoid in-memory databases
+* In-memory databases can seem beneficial because they
+  * Don’t require removal of test data
+  * Work faster
+  * Can be instantiated for each test run
+* `I don’t recommend using in-memory databases because they aren’t consistent functionality-wise with regular databases.`
+  * This is, once again, the problem of a mismatch between production and test environments.
+
+## 10.4 Reusing code in test sections
+* Integration tests can quickly grow too large and thus lose ground on the maintainabil- ity metric. 
+  * It’s important to keep integration tests as short as possible but without cou- pling them to each other or affecting readability. 
+
+### 10.4.1 Reusing code in arrange sections
+* As you might remember from chapter 3, the best way to reuse code between the tests’ arrange sections is to introduce private factory methods.
+* You can also define default values for the method’s arguments
+* `Object Mother vs. Test Data Builder`
+  * The pattern shown in listings 10.9 and 10.10 is called the Object Mother. The Object Mother is a class or method that helps create test fixtures (objects the test runs against).
+  * Test Data Builder. It works similarly to Object Mother but exposes a fluent interface instead of plain methods.
+    ```
+    User user = new UserBuilder()
+        .WithEmail("user@mycorp.com")
+        .WithType(UserType.Employee)
+        .Build();
+    ``` 
+  * `Test Data Builder slightly improves test readability but requires too much boilerplate.` For that reason, I recommend sticking to the Object Mother (at least in C#, where you have optional arguments as a language feature).
+* WHERE TO PUT FACTORY METHODS
+  * Start simple. 
+  * Place the factory methods in the same class by default. 
+  * Move them into separate helper classes only when code duplication becomes a significant issue. 
+  * Don’t put the factory methods in the base class
+
+### 10.4.2 Reusing code in act sections
+### 10.4.3 Reusing code in assert sections
+### 10.4.4 Does the test create too many database transactions?
+
+## 10.5 Common database testing questions
+*  Test only the most complex or important read operations; disregard the rest.
+
+### 10.5.1 Should you test reads?
+### 10.5.2 Should you test repositories?
+* Still, such tests are a net loss to your test suite due to high maintenance costs and inferior protection against regressions.
+
+## 10.6 Conclusion
+ 
+<br>
+
+---
+
+# **Part 4 Unit testing anti-patterns**
+<br>
+
+# Chapter 11 Unit testing anti-patterns
+* When it comes to unit testing, one of the most commonly asked questions is how to test a private method. The short answer is that you shouldn’t do so at all, but there’s quite a bit of nuance to this topic.
+
+## 11.1 Unit testing private methods
+### 11.1.1 Private methods and test fragility
+* 
+###
+###
+###
+###
+###
+###
+
+## 
+###
+###
+###
+###
+###
+###
 
 ## Reference
 * https://site.mockito.org/

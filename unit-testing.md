@@ -1694,17 +1694,195 @@ public interface IFileSystem
   * A domain event describes an event in the application that is mean- ingful to domain experts. The meaningfulness for domain experts is what differentiates domain events from regular events (such as button clicks). Domain events are often used to inform external applications about import- ant changes that have happened in your system.
 
 # Chapter 8 Why integration testing?
+* You can never be sure your system works as a whole if you rely on unit tests exclu- sively. Unit tests are great at verifying business logic, but it’s not enough to check that logic in a vacuum.
 
-##
-### 
-### 
-### 
+## 8.1 What is an integration test?
+* It’s also crucial to balance the number of unit and integration tests.
 
-##
-### 
-### 
-### 
-### 
+### 8.1.1 The role of integration tests
+* As you may remember from chapter 2, a unit test is a test that meets the following three requirements:
+  * Verifies a single unit of behavior,
+  * Does it quickly,
+  * And does it in isolation from other tests.
+* A test that doesn’t meet at least one of these three requirements falls into the category of integration tests. 
+  * An integration test then is any test that is not a unit test.
+  * In practice, integration tests almost always verify how your system works in integration with out-of-process dependencies. In other words, these tests cover the code from the controllers quadrant (see chapter 7 for more details about code quadrants). The diagram in figure 8.1 shows the typical responsibilities of unit and integration tests.
+    * `Unit tests` cover the domain model, while `integration tests` check the code that glues that domain model with out-of-process dependencies.
+  * Note that tests covering the controllers quadrant can sometimes be unit tests too. 
+    * If all out-of-process dependencies are replaced with mocks, there will be no dependencies shared between tests, which will allow those tests to remain fast and maintain their isolation from each other. 
+  * As you may also remember from chapter 7, the other two quadrants from figure 8.1 (trivial code and overcomplicated code) shouldn’t be tested at all.
+    * Trivial code isn’t worth the effort, while overcomplicated code should be refactored into algorithms and controllers. 
+    * Thus, all your tests must focus on the domain model and the controllers quadrants exclusively.
+
+### 8.1.2 The Test Pyramid revisited
+* It’s important to maintain a balance between unit and integration tests. 
+  * Working directly with out-of-process dependencies makes integration tests slow.
+  * Such tests are also more expensive to maintain. 
+  * The increase in maintainability costs is due to
+    * The necessity to keep the out-of-process dependencies operational
+    * The greater number of collaborators involved, which inflates the test’s size
+  * On the other hand, integration tests go through a larger amount of code (both your code and the code of the libraries used by the application), which makes them better than unit tests at protecting against regressions.
+  * They are also more detached from the production code and therefore have better resistance to refactoring.
+* The ratio between unit and integration tests can differ depending on the project’s specifics, but the general rule of thumb is the following: 
+  * check as many of the business scenario’s edge cases as possible with unit tests; 
+  * use integration tests to cover one happy path, as well as any edge cases that can’t be covered by unit tests.
+* Figure 8.2 The Test Pyramid represents a trade-off that works best for most applications. 
+  * Fast, cheap unit tests cover the majority of edge cases,
+  * while a smaller number of slow, more expensive integration tests ensure the correctness of the system as a whole.
+* Figure 8.3 The Test Pyramid of a simple project. Little complexity requires a smaller number of unit tests compared to a normal pyramid.
+
+### 8.1.3 Integration testing vs. failing fast
+* This section elaborates on the guideline of using integration tests to cover 
+  * one happy path per business scenario 
+  * and any edge cases that can’t be covered by unit tests.
+* For an integration test, select the longest happy path in order to verify interactions with all out-of-process dependencies. 
+  * If there’s no one path that goes through all such interactions, write additional integration tests—as many as needed to capture communications with every external system.
+* As with the edge cases that can’t be covered by unit tests, there are exceptions to this part of the guideline, too.
+  * There’s no need to test an edge case if an incorrect execution of that edge case immediately fails the entire application.
+* `It’s better to not write a test at all than to write a bad test. A test that doesn’t provide significant value is a bad test.`
+* `The Fail Fast principle`
+  * The Fail Fast principle stands for stopping the current operation as soon as any unex- pected error occurs. This principle makes your application more stable by
+    * `Shortening the feedback loop`—The sooner you detect a bug, the easier it is to fix. A bug that is already in production is orders of magnitude more expen- sive to fix compared to a bug found during development.
+    * `Protecting the persistence state`—Bugs lead to corruption of the application’s state. Once that state penetrates into the database, it becomes much harder to fix. Failing fast helps you prevent the corruption from spreading.
+  * Stopping the current operation is normally done by throwing exceptions, because exceptions have semantics that are perfectly suited for the Fail Fast principle: they interrupt the program flow and pop up to the highest level of the execution stack, where you can log them and shut down or restart the operation.
+  * Preconditions are one example of the Fail Fast principle in action. A failing precondi- tion signifies an incorrect assumption made about the application state, which is always a bug. Another example is reading data from a configuration file. You can arrange the reading logic such that it will throw an exception if the data in the config- uration file is incomplete or incorrect. You can also put this logic close to the appli- cation startup, so that the application doesn’t launch if there’s a problem with its configuration.
+
+## 8.2 Which out-of-process dependencies to test directly
+* As I mentioned earlier, integration tests verify how your system integrates with out-of- process dependencies. There are two ways to implement such verification: 
+  * use the real out-of-process dependency, 
+  * or replace that dependency with a mock.
+
+### 8.2.1 The two types of out-of-process dependencies
+* All out-of-process dependencies fall into two categories:
+  * `Managed dependencies (out-of-process dependencies you have full control over)`—These dependencies are only accessible through your application; interactions with them aren’t visible to the external world. A typical example is a database. Exter- nal systems normally don’t access your database directly; they do that through the API your application provides.
+  * `Unmanaged dependencies (out-of-process dependencies you don’t have full control over)`— Interactions with such dependencies are observable externally. Examples include an SMTP server and a message bus: both produce side effects visible to other applications.
+  * I mentioned in chapter 5 that communications with managed dependencies are implementation details. 
+    * Conversely, communications with unmanaged dependencies are part of your system’s observable behavior (figure 8.4). 
+* `Use real instances of managed dependencies; replace unman- aged dependencies with mocks.`
+
+### 8.2.2 Working with both managed and unmanaged dependencies
+* A system begins with its own dedicated database. After a while, another system begins to require data from the same database. And so the team decides to share access to a limited number of tables just for ease of integration with that other system. As a result, the database becomes a dependency that is both managed and unmanaged. It still contains parts that are visible to your application only; but, in addi- tion to those parts, it also has a number of tables accessible by other applications.
+
+### 8.2.3 What if you can’t use a real database in integration tests?
+* Sometimes, for reasons outside of your control, you just can’t use a real version of a managed dependency in integration tests.
+  * An example would be a legacy database that you can’t deploy to a test automation environment, not to mention a developer machine, because of some IT security policy, or because the cost of setting up and maintaining a test database instance is prohibitive.
+  * Should you mock out the database anyway, despite it being a managed dependency? No, because mocking out a managed depen- dency compromises the integration tests’ resistance to refactoring.
+  * If you can’t test the database as-is, don’t write integration tests at all, and instead, focus exclusively on unit testing of the domain model. Remember to always put all your tests under close scrutiny. 
+
+## 8.3 Integration testing: An example
+### 8.3.1 What scenarios to test?
+* As I mentioned earlier, the general guideline for integration testing is to 
+  * cover the longest happy path 
+  * and any edge cases that can’t be exercised by unit tests. 
+
+### 8.3.2 Categorizing the database and the message bus
+* The application database is a managed dependency because no other system can access it. Therefore, you should use a real instance of it.
+* On the other hand, the message bus is an unmanaged dependency—its sole pur- pose is to enable communication with other systems. The integration test will mock out the message bus and verify the interactions between the controller and the mock afterward.
+
+### 8.3.3 What about end-to-end testing?
+* There will be no `end-to-end tests` in our sample project. 
+  * An end-to-end test in a sce- nario with an API would be a test running against a deployed, fully functioning ver- sion of that API, which means no mocks for any of the out-of-process dependencies (figure 8.7). 
+* Figure 8.7 
+  * End-to-end tests emulate the external client and therefore test a deployed version of the application with all out-of-process dependencies included in the testing scope. End-to-end tests shouldn’t check managed dependencies (such as the database) directly, only indirectly through the application.
+* Figure 8.8 
+  * Integration tests host the application within the same process. Unlike end-to-end tests, integration tests substitute unmanaged dependencies with mocks. The only out-of-process components for integration tests are managed dependencies.
+* As I mentioned in chapter 2, whether to use end-to-end tests is a judgment call. 
+  * For the most part, when you include managed dependencies in the integration testing scope and mock out only unmanaged dependencies, integration tests provide a level of protection that is close enough to that of end-to-end tests, so you can skip end-to- end testing. However, you could still create one or two overarching end-to-end tests that would provide a sanity check for the project after deployment. 
+
+### 8.3.4 Integration testing: The first try
+* `It’s important to check the state of the database independently of the data used as input parameters.`
+  * To do that, the integration test queries the user and company data separately in the assert section, creates new userFromDb and companyFromDb instances, and only then asserts their state. 
+  * This approach ensures that the test exercises both writes to and reads from the database and thus provides the maximum protection against regressions. 
+
+## 8.4 Using interfaces to abstract dependencies
+* One of the most misunderstood subjects in the sphere of unit testing is `the use of interfaces`. 
+  * Developers often ascribe invalid reasons to why they introduce interfaces and, as a result, tend to overuse them.
+
+### 8.4.1 Interfaces and loose coupling
+* Many developers introduce interfaces for out-of-process dependencies, such as the database or the message bus, even when these interfaces have only one implementation.
+  * The common reasoning behind the use of such interfaces is that they help to
+    * Abstract out-of-process dependencies, thus achieving loose coupling
+    * Add new functionality without changing the existing code, thus adhering to the Open-Closed principle (OCP)
+  * Both of these reasons are misconceptions. 
+    * Interfaces with a single implementation are not abstractions 
+    * and don’t provide loose coupling any more than concrete classes that implement those interfaces.
+  * `Genuine abstractions are discovered, not invented.`
+    * The dis- covery, by definition, takes place post factum, when the abstraction already exists but is not yet clearly defined in the code. 
+    * Thus, for an interface to be a genuine abstrac- tion, it must have at least two implementations.
+  * The second reason (the ability to add new functionality without changing the exist- ing code) is a misconception because it violates a more foundational principle: YAGNI. 
+    * YAGNI stands for “You aren’t gonna need it” and advocates against investing time in functionality that’s not needed right now.
+    * The two major reasons are as follows:
+      * `Opportunity cost`—If you spend time on a feature that business people don’t need at the moment, you steer that time away from features they do need right now. Moreover, when the business people finally come to require the developed func- tionality, their view on it will most likely have evolved, and you will still need to adjust the already-written code. Such activity is wasteful. It’s more beneficial to implement the functionality from scratch when the actual need for it emerges. 
+      * **`The less code in the project, the better.`** Introducing code just in case without an imme- diate need unnecessarily increases your code base’s cost of ownership. It’s bet- ter to postpone introducing new functionality until as late a stage of your project as possible.
+      * `Writing code is an expensive way to solve problems. The less code the solution requires and the simpler that code is, the better.`
+
+### 8.4.2 Why use interfaces for out-of-process dependencies?
+* Therefore, don’t introduce interfaces for out-of-process dependencies unless you need to mock out those dependencies.
+
+### 8.4.3 Using interfaces for in-process dependencies
+* But unlike out-of-process dependencies, you should never check interactions between domain classes, because doing so results in brittle tests: tests that couple to implementation details and thus fail on the metric of resisting to refactoring (see chapter 5 for more details about mocks and test fragility).
+
+## 8.5 Integration testing best practices
+* There are some general guidelines that can help you get the most out of your integra- tion tests:
+  * Making domain model boundaries explicit
+  * Reducing the number of layers in the application 
+  * Eliminating circular dependencies
+
+### 8.5.1 Making domain model boundaries explicit
+* The domain model is the collection of domain knowledge about the problem your project is meant to solve. Assigning the domain model an explicit boundary helps you better visualize and reason about that part of your code.
+* The explicit boundary between domain classes and controllers makes it easier to tell the difference between unit and integration tests.
+* The boundary itself can take the form of a separate assembly or a namespace. The particulars aren’t that important as long as all of the domain logic is put under a sin- gle, distinct umbrella and not scattered across the code base.
+
+### 8.5.2 Reducing the number of layers
+* Most programmers naturally gravitate toward abstracting and generalizing the code by introducing additional layers of indirection.
+  * In extreme cases, an application gets so many abstraction layers that it becomes too hard to navigate the code base and understand the logic behind even the simplest operations.
+* `Layers of indirection negatively affect your ability to reason about the code.`
+  * An excessive number of abstractions doesn’t help unit or integration testing, either.
+* Code bases with many layers of indirections tend not to have a clear boundary between controllers and the domain model (which, as you might remember from chapter 7, is a precondition for effective tests). 
+* There’s also a much stronger tendency to verify each layer separately. 
+  * This tendency results in a lot of low-value integration tests, each of which exercises only the code from a specific layer and mocks out layers
+  * The end result is always the same: insufficient protection against regres- sions combined with low resistance to refactoring.
+* Try to have as few layers of indirection as possible. 
+  * In most backend systems, you can get away with just three: 
+    * the domain model, 
+    * application services layer (control- lers), 
+    * and infrastructure layer. 
+
+### 8.5.3 Eliminating circular dependencies
+### 8.5.4 Using multiple act sections in a test
+* As you might remember from chapter 3, having more than one arrange, act, or assert section in a test is a code smell.
+* The problem is that such tests lose focus and can quickly become too bloated.
+  * It’s best to split the test by extracting each act into a test of its own.
+* It may seem like unnecessary work (after all, why create two tests where one would suffice?), but this work pays off in the long run. 
+* `The exception to this guideline is tests working with out-of-process dependencies that are hard to bring to a desirable state.`
+  * Let’s say for example that registering a user results in creating a bank account in an external banking system. The bank has provi- sioned a sandbox for your organization, and you want to use that sandbox in an end- to-end test. The problem is that the sandbox is too slow, or maybe the bank limits the number of calls you can make to that sandbox. In such a scenario, it becomes benefi- cial to combine multiple acts into a single test and thus reduce the number of interac- tions with the problematic out-of-process dependency.
+
+## 8.6 How to test logging functionality
+### 8.6.1 Should you test logging?
+* The answer to the question of whether you should test logging comes down to this: Is logging part of the application’s observable behavior, or is it an implementation detail?
+  * `If these side effects are meant to be observed by your customer,` the application’s cli- ents, or anyone else other than the developers themselves, then logging is an observ- able behavior and thus must be tested.
+  * `If the only audience is the developers`, then it’s an implementation detail that can be freely modified without anyone noticing, in which case it shouldn’t be tested.
+
+### 8.6.2 How should you test logging?
+#### INTRODUCING A WRAPPER ON TOP OF ILOGGER
+#### UNDERSTANDING STRUCTURED LOGGING
+* `Structured logging` is a logging technique where capturing log data is decoupled from the rendering of that data. Traditional logging works with simple text. A call like
+  * `logger.Info("User Id is " + 12);`
+* On the other hand, structured logging introduces structure to your log storage. The use of a structured logging library looks similar on the surface:
+  * `logger.Info("User Id is {UserId}", 12);`
+#### WRITING TESTS FOR SUPPORT AND DIAGNOSTIC LOGGING
+
+### 8.6.3 How much logging is enough?
+* It’s important not to overuse diagnostic logging, for the following two reasons:
+  * `Excessive logging clutters the code.` This is especially true for the domain model. That’s why I don’t recommend using diagnostic logging in User even though such a use is fine from a unit testing perspective: it obscures the code.
+  * `Logs’ signal-to-noise ratio is key.` The more you log, the harder it is to find relevant information. Maximize the signal; minimize the noise.
+
+### 8.6.4 How do you pass around logger instances?
+* Listing 8.8 Storing ILogger in a static field
+  * Steven van Deursen and Mark Seeman, in their book Dependency Injection Principles, Practices, Patterns (Manning Publications, 2018), call this type of dependency acquisi- tion ambient context. 
+  * This is an anti-pattern. Two of their arguments are that
+    * The dependency is hidden and hard to change. 
+    * Testing becomes more difficult.
 
 ## Reference
 * https://site.mockito.org/
@@ -1732,7 +1910,7 @@ integration testing
   transaction
   concurrency
 end-to-end testing
-
+  https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#webmvc.test
 test fixture
 test double
 

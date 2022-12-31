@@ -2035,81 +2035,115 @@ public interface IFileSystem
 
 ## 11.1 Unit testing private methods
 ### 11.1.1 Private methods and test fragility
-* 
-###
-###
-###
-###
-###
-###
+* Exposing methods that you would otherwise keep private just to enable unit testing violates one of the foundational principles we discussed in chapter 5: testing observ- able behavior only. 
+  * Exposing private methods leads to `coupling tests to implementa- tion details` and, ultimately, `damaging your tests’ resistance to refactoring—the most important metric of the four.`
+  * Instead of testing private methods directly, test them indirectly, as part of the overarching observ- able behavior.
 
-## 
-###
-###
-###
-###
-###
-###
+### 11.1.2 Private methods and insufficient coverage
+* Sometimes, the private method is too complex, and testing it as part of the observable behavior doesn’t provide sufficient coverage. 
+  * Assuming the observable behavior already has reasonable test coverage, there can be two issues at play:
+    * `This is dead code.` If the uncovered code isn’t being used, this is likely some extra- neous code left after a refactoring. It’s best to delete this code.
+    * `There’s a missing abstraction.` If the private method is too complex (and thus is hard to test via the class’s public API), it’s an indication of a missing abstraction that should be extracted into a separate class.
 
-## Reference
-* https://site.mockito.org/
-* [manning - unit testing](https://freecontent.manning.com/what-is-a-unit-test-part-2-classical-vs-london-schools/)
-* [detroit vs london school](https://medium.com/@adrianbooth/test-driven-development-wars-detroit-vs-london-classicist-vs-mockist-9956c78ae95f)
-* [mocksArentStubs](https://martinfowler.com/articles/mocksArentStubs.html)
-* [@SpyBean @MockBean 의도적으로 사용하지 않기](https://jojoldu.tistory.com/320)
-* [TDD에 대한 몇 가지 질문](https://brunch.co.kr/@cleancode/44)
-* [1. 테스트하기 좋은 코드 - 테스트하기 어려운 코드](https://jojoldu.tistory.com/674)
-  * [Testing, Oh my! by Jin-Wook Chung](https://jwchung.github.io/testing-oh-my)
-  * [스프링캠프 2019 [Track 2 Session 3] : 무엇을 테스트할 것인가? 어떻게 테스트할 것인가? (권용근)](https://www.youtube.com/watch?v=YdtknE_yPk4)
-* [HumbleObject](https://martinfowler.com/bliki/HumbleObject.html)
-* [TDD is dead](https://dhh.dk/2014/tdd-is-dead-long-live-testing.html)
+### 11.1.3 When testing private methods is acceptable
+* There are exceptions to the rule of never testing private methods. To understand those exceptions, we need to revisit the relationship between the code’s publicity and purpose from chapter 5. Table 11.1 sums up that relationship (you already saw this table in chapter 5; I’m copying it here for convenience).
+* As you might remember from chapter 5, making the observable behavior public and implementation details private results in a well-designed API. On the other hand, leaking implementation details damages the code’s encapsulation. 
+  * The intersection of observable behavior and private methods is marked N/A in the table because for a method to become part of observable behavior, it has to be used by the client code, which is impossible if that method is private.
+* `Note that testing private methods isn’t bad in and of itself. It’s only bad because those private methods are a proxy for implementation details.`
+* The private constructor is private because the class is restored from the database by an object-relational mapping (ORM) library. 
+  * That ORM doesn’t need a public construc- tor; it may well work with a private one. At the same time, our system doesn’t need a constructor, either, because it’s not responsible for the creation of those inquiries.
 
-* https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-best-practices#characteristics-of-a-good-unit-test
-* https://github.com/jojoldu/review/blob/master/OKKY_TDD/README.md
-https://github.com/msbaek/atdd-example
-* [백명석 clean coders](https://www.youtube.com/playlist?list=PLeQ0NTYUDTmMM71Jn1scbEYdLFHz5ZqFA)
+## 11.2 Exposing private state
+* Another common anti-pattern is exposing private state for the sole purpose of unit testing.
+  * The guideline here is the same as with private methods: don’t expose state that you would otherwise keep private—test observable behavior only. Let’s take a look at the following listing.
+    ```
+    // Listing 11.4 A class with private state
+    public class Customer {
+        private CustomerStatus _status = CustomerStatus.Regular; // Private state
 
----
-tdd/bdd
-test (unit test vs integration test , system test , endpoint integration test)
-unit testing
-integration testing
-  transaction
-  concurrency
-end-to-end testing
-  https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#webmvc.test
-test fixture
-test double
+        public void Promote() {
+            _status = CustomerStatus.Preferred;
+        }
+        
+        public decimal GetDiscount() {
+            return _status == CustomerStatus.Preferred ? 0.05 m : 0 m;
+        }
+    }
+    ```
+  * That would be an anti-pattern, however. Remember, `your tests should interact with the system under test (SUT) exactly the same way as the production code and shouldn’t have any spe- cial privileges.`
+  * `Later, if the production code starts using the customer status field, you’d be able to couple to that field in tests too`, because it would officially become part of the SUT’s observable behavior.
 
-what to test?
-  everthing (clean coder) vs domain-heart vs test-reflief
+## 11.3 Leaking domain knowledge to tests
 ```
-// You Must Know It Works, Clean Coder, p.46
+public static class Calculator {
+    public static int Add(int value1, int value2) {
+        return value1 + value2;
+    }
+}
 
-How much of the code should be tested with these automated unit tests? Do
-I really need to answer that question? All of it! All. Of. It.
+// Listing 11.5 Leaking algorithm implementation
+public class CalculatorTests {
+    public void Adding_two_numbers() {
+        int value1 = 1;
+        int value2 = 3;
+        int expected = value1 + value2; // The leakage
+        
+        int actual = Calculator.Add(value1, value2);
+        
+        Assert.Equal(expected, actual);
+    }
+}
 
-Am I suggesting 100% test coverage? No, I’m not suggesting it. I’m demanding it.
-Every single line of code that you write should be tested. Period.
-
-Isn’t that unrealistic? Of course not. You only write code because you expect it
-to get executed. If you expect it to get executed, you ought to know that it
-works. The only way to know this is to test it.
+public class CalculatorTests {
+    public void Adding_two_numbers() {
+        int value1 = 1;
+        int value2 = 3;
+        
+        int actual = Calculator.Add(value1, value2);
+        
+        Assert.Equal(4, actual);
+    }
+}
 ```
-does this (test) code hurts?
-testing test codes
 
-spring annotations
-  * https://reflectoring.io/spring-boot-test/
-  * https://dev.to/stealthmusic/why-you-should-start-using-junit-5-5gk2
-  @SpringBootTest
-  @WebMvcTest
-  @MockMvc
-  @Nested
-  ...
+## 11.4 Code pollution
+* `Code pollution` is adding production code that’s only needed for testing.
+  ```
+  // Listing 11.8 Logger with a Boolean switch
+  public class Logger {
+      private readonly bool _isTestEnvironment;
+  
+      public Logger(bool isTestEnvironment) { // The switch
+          _isTestEnvironment = isTestEnvironment;
+      }
 
-boundaryb
-testAny
+      public void Log(string text) {
+          if (_isTestEnvironment) // The switch
+              return;
+          /* Log the text */
+      }
+  }
+  ```
 
----
-Practical Testing in Spring
+* `The problem with code pollution is that it mixes up test and production code and thereby increases the maintenance costs of the latter. To avoid this anti-pattern, keep the test code out of the production code base.`
+  * In the example with Logger, introduce an ILogger interface and create two imple- mentations of it: a real one for production and a fake one for testing purposes.
+
+## 11.5 Mocking concrete classes
+* you can mock concrete classes instead and thus preserve part of the original classes’ functionality, which can be useful at times. 
+  * This alternative has a sig- nificant drawback, though: it violates the Single Responsibility principle.
+  * `Listing 11.11 A class that calculates statistics`
+  * `The necessity to mock a concrete class in order to preserve part of its functionality is a result of violating the Single Responsibility principle.`
+
+## 11.6 Working with time
+* Many application features require access to the current date and time. Testing func- tionality that depends on time can result in false positives, though: the time during the act phase might not be the same as in the assert.
+
+### 11.6.1 Time as an ambient context
+* The first option is to use the ambient context pattern. You already saw this pattern in chapter 8 in the section about testing loggers. In the context of time, the ambient con- text would be a custom class that you’d use in code instead of the framework’s built-in DateTime.Now, as shown in the next listing.
+  * Just as with the logger functionality, `using an ambient context for time is also an anti- pattern.` The ambient context pollutes the production code and makes testing more difficult.
+
+### 11.6.2 Time as an explicit dependency
+* A better approach is to inject the time dependency explicitly (instead of referring to it via a static method in an ambient context), `either as a service or as a plain value, as shown in the following listing.`
+  * Of these two options, prefer injecting the time as a value rather than as a service. It’s easier to work with plain values in production code, and it’s also easier to stub those values in tests.
+
+<EOF>
+
